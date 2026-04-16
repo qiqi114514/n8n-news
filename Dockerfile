@@ -4,13 +4,13 @@
 WORKDIR /app
 
 # Copy the requirements first to leverage Docker cache
-COPY ./scripts/requirements.txt .
+COPY ./src/requirements.txt .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the scripts
-COPY ./scripts .
+# Copy the rest of the source code
+COPY ./src .
 
 # Run the server
 CMD ["python3", "api_server.py"]
