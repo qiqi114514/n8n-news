@@ -26,7 +26,9 @@ services:
     mem_limit: 1024m
     cpu_shares: 512
     volumes:
-      - ./scripts:/app:rw
+      - ./src:/app:rw
+      - ./data:/app/data:rw
+      - ./logs:/app/logs:rw
     ports:
       - "8000:8000"
     networks:
