@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """爬虫模块"""
 
-from crawlers.base import BaseCrawler
+from crawlers.base import BaseCrawler, NewsItem
 from crawlers.xinhua import XinhuaCrawler
 from crawlers.reuters import ReutersCrawler
 from crawlers.people import PeopleCrawler
@@ -14,6 +14,7 @@ from crawlers.guardian import GuardianCrawler
 
 __all__ = [
     "BaseCrawler",
+    "NewsItem",
     "XinhuaCrawler",
     "ReutersCrawler",
     "PeopleCrawler",
@@ -22,6 +23,5 @@ __all__ = [
     "CeCrawler",
     "BBCcrawler",
     "APNewsCrawler",
-    "AFPCrawler",
     "GuardianCrawler",
 ]

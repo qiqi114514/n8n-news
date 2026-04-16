@@ -1,44 +1,31 @@
 # -*- coding: utf-8 -*-
 """BBC News 爬虫"""
-
-from typing import List, Optional
+from typing import List
 from datetime import datetime
 from bs4 import BeautifulSoup
-
 from crawlers.base import BaseCrawler, NewsItem
 from utils import fetch_html, fetch_article_content
 
 
 class BBCcrawler(BaseCrawler):
-    """BBC News 爬虫"""
+    """BBC News 新闻爬虫"""
     
     def __init__(self):
         super().__init__(name="bbc")
         self.base_url = "https://www.bbc.com/news"
     
     def fetch_news_list(self, max_count: int = 10) -> List[NewsItem]:
-        """抓取 BBC News 新闻列表
-        
-        Args:
-            max_count: 最大抓取条数
-            
-        Returns:
-            NewsItem 列表
-        """
+        """抓取 BBC News 新闻列表"""
         news_list = []
-        
-        # BBC News 首页
         url = "https://www.bbc.com/news"
-        html = fetch_html(url, self.logger)
+        html = fetch_html(url, self._get_logger())
         
         if not html:
-            self.logger.error("Failed to fetch bbc.com/news")
+            self._get_logger().error("Failed to fetch bbc.com/news")
             return news_list
         
         try:
             soup = BeautifulSoup(html, 'lxml')
-            
-            # 查找新闻链接
             articles = []
             
             # BBC 常用的选择器
@@ -100,27 +87,24 @@ class BBCcrawler(BaseCrawler):
                     continue
                 seen_urls.add(url)
                 
-                # 提取发布时间（BBC 通常在页面中，这里先设为 None）
-                publish_time = None
-                
                 # 抓取正文内容
-                content = fetch_article_content(url, self.logger)
+                content = fetch_article_content(url, self._get_logger())
                 
                 news_item = NewsItem(
                     title=title,
                     url=url,
-                    publish_time=publish_time,
+                    publish_time=datetime.now(),
                     source="bbc",
                     content=content
                 )
                 
                 if self.validate_news_item(news_item):
                     news_list.append(news_item)
-                    self.logger.info(f"Found news: {title[:50]}...")
+                    self._get_logger().info(f"Found news: {title[:50]}...")
             
-            self.logger.info(f"Successfully fetched {len(news_list)} news from bbc.com/news")
-            
+            self._get_logger().info(f"Successfully fetched {len(news_list)} news from bbc.com/news")
+        
         except Exception as e:
-            self.logger.error(f"Error parsing bbc.com/news: {e}")
+            self._get_logger().error(f"Error parsing bbc.com/news: {e}")
         
         return news_list

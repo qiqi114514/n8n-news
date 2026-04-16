@@ -1,44 +1,31 @@
 # -*- coding: utf-8 -*-
 """AP News 爬虫"""
-
-from typing import List, Optional
+from typing import List
 from datetime import datetime
 from bs4 import BeautifulSoup
-
 from crawlers.base import BaseCrawler, NewsItem
 from utils import fetch_html, fetch_article_content
 
 
 class APNewsCrawler(BaseCrawler):
-    """AP News 爬虫"""
+    """AP News 新闻爬虫"""
     
     def __init__(self):
         super().__init__(name="apnews")
         self.base_url = "https://apnews.com"
     
     def fetch_news_list(self, max_count: int = 10) -> List[NewsItem]:
-        """抓取 AP News 新闻列表
-        
-        Args:
-            max_count: 最大抓取条数
-            
-        Returns:
-            NewsItem 列表
-        """
+        """抓取 AP News 新闻列表"""
         news_list = []
-        
-        # AP News 首页
         url = "https://apnews.com"
-        html = fetch_html(url, self.logger)
+        html = fetch_html(url, self._get_logger())
         
         if not html:
-            self.logger.error("Failed to fetch apnews.com")
+            self._get_logger().error("Failed to fetch apnews.com")
             return news_list
         
         try:
             soup = BeautifulSoup(html, 'lxml')
-            
-            # 查找新闻链接
             articles = []
             
             # AP News 常用的选择器
@@ -96,27 +83,24 @@ class APNewsCrawler(BaseCrawler):
                     continue
                 seen_urls.add(url)
                 
-                # 提取发布时间（AP News 通常在页面中）
-                publish_time = None
-                
                 # 抓取正文内容
-                content = fetch_article_content(url, self.logger)
+                content = fetch_article_content(url, self._get_logger())
                 
                 news_item = NewsItem(
                     title=title,
                     url=url,
-                    publish_time=publish_time,
+                    publish_time=datetime.now(),
                     content=content,
                     source="apnews"
                 )
                 
                 if self.validate_news_item(news_item):
                     news_list.append(news_item)
-                    self.logger.info(f"Found news: {title[:50]}...")
+                    self._get_logger().info(f"Found news: {title[:50]}...")
             
-            self.logger.info(f"Successfully fetched {len(news_list)} news from apnews.com")
-            
+            self._get_logger().info(f"Successfully fetched {len(news_list)} news from apnews.com")
+        
         except Exception as e:
-            self.logger.error(f"Error parsing apnews.com: {e}")
+            self._get_logger().error(f"Error parsing apnews.com: {e}")
         
         return news_list
