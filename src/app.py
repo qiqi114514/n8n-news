@@ -14,7 +14,10 @@ st.set_page_config(
 # 2. 数据库连接函数（加入异常捕获）
 def get_db_connection():
     try:
-        conn = sqlite3.connect('news.db', check_same_thread=False)
+        # 数据库文件现在位于 data/ 目录
+        from pathlib import Path
+        db_path = Path(__file__).parent.parent / 'data' / 'news.db'
+        conn = sqlite3.connect(str(db_path), check_same_thread=False)
         return conn
     except Exception as e:
         st.error(f"❌ 无法连接数据库: {e}")
