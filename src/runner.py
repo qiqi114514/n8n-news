@@ -22,7 +22,9 @@ from crawlers.ce import CeCrawler
 from crawlers.bbc import BBCcrawler
 from crawlers.apnews import APNewsCrawler
 from crawlers.guardian import GuardianCrawler
-# ... 其他爬虫保持一致
+from crawlers.france24 import France24Crawler
+from crawlers.nhk import NHKCrawler
+
 
 # 配置日志输出到 stderr
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
@@ -47,13 +49,15 @@ class RSSContentExtractor:
     # 正文特征关键词 (加分项)
     POSITIVE_PATTERNS = [
         'content', 'article', 'post', 'body', 'main', 'story', 'text',
-        'entry', 'detail', 'news', 'information', 'description'
+        'entry', 'detail', 'news', 'information', 'description', 'left_zw'
     ]
 
     # 负面特征关键词 (减分项)
     NEGATIVE_KEYWORDS = [
         'copyright', '广告', '推荐', '相关阅读', '猜你喜欢', '分享到',
-        '二维码', '扫一扫', '责编', '编辑', '来源', '版权声明', '免责声明'
+        '二维码', '扫一扫', '责编', '编辑', '来源', '版权声明', '免责声明',
+        '转载', '作者', '出处', '本网', '本网站', '本站', '原创', '未经授权',
+        '保留所有权利', 'all rights reserved', '©'
     ]
 
     def extract(self, url: str, html: str, source_name: str = "") -> str:
@@ -150,11 +154,11 @@ class RSSContentExtractor:
             # 3. 关键词加分/减分
             class_str = " ".join(tag.get('class', [])) + " " + tag.get('id', '')
             for word in self.POSITIVE_PATTERNS:
-                if word in class_str or word in tag.name:
+                if word in class_str.lower() or word in tag.name.lower():
                     score += 10
             
             for word in self.NEGATIVE_KEYWORDS:
-                if word in text or word in class_str:
+                if word in text.lower() or word in class_str.lower():
                     score -= 20
             
             # 4. 密度惩罚 (如果链接文本占比超过 30%，扣分)
@@ -188,7 +192,7 @@ class RSSContentExtractor:
         3. 去重行
         """
         # 再次清理容器内部的残留干扰
-        for el in container.find_all(['script', 'style', 'img']):
+        for el in container.find_all(['script', 'style', 'img', 'br']):
             el.decompose()
 
         texts = []
@@ -207,7 +211,7 @@ class RSSContentExtractor:
             # 过滤短行和负面行
             if len(line) < 5:
                 continue
-            if any(k in line for k in ['版权声明', '责任编辑', '扫码下载', '分享到', '版权所有']):
+            if any(k in line.lower() for k in ['版权声明', '责任编辑', '扫码下载', '分享到', '版权所有', 'copyright', 'all rights reserved', '原创', '不得转载', '作者', '编辑', '责编', '来源']):
                 continue
             
             # 简单的去重：如果这一行完全出现过，跳过
@@ -235,7 +239,7 @@ class RSSContentExtractor:
             txt = p.get_text(strip=True)
             if len(txt) < 20:
                 continue
-            if any(k in txt for k in ['copyright', '版权所有', '广告']):
+            if any(k in txt.lower() for k in ['版权', '版权所有', '广告', 'copyright', 'all rights reserved', '原创', '不得转载', '作者', '编辑', '责编', '来源']):
                 continue
             if txt in seen:
                 continue
@@ -247,7 +251,19 @@ class RSSContentExtractor:
         if len(valid_texts) < 2:
             body = soup.find('body')
             if body:
-                return body.get_text(separator='\n', strip=True)[:2000]
+                # 过滤掉body中的版权和元数据
+                for tag in body.find_all(['script', 'style', 'nav', 'footer', 'header', 'aside']):
+                    tag.decompose()
+                full_text = body.get_text(separator='\n', strip=True)
+                
+                # 按行分割并过滤版权信息
+                lines = full_text.split('\n')
+                filtered_lines = []
+                for line in lines:
+                    if len(line) > 20 and not any(k in line.lower() for k in ['版权', '版权所有', '广告', 'copyright', 'all rights reserved', '原创', '不得转载', '作者', '编辑', '责编', '来源']):
+                        filtered_lines.append(line)
+                
+                return "\n\n".join(filtered_lines)[:2000]
                 
         return "\n\n".join(valid_texts)
 
@@ -273,6 +289,39 @@ def clean_content(text, source):
 
     # 通用清洗
     text = re.sub(r'\n+', '\n', text).strip()
+    
+    # 新增：去除常见的版权和元数据信息
+    # 移除开头和结尾的版权信息
+    text = re.sub(r'^.*?版权.*?\n?', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'^.*?免责声明.*?\n?', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'^.*?编辑.*?\n?', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'^.*?责编.*?\n?', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'^.*?作者.*?\n?', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'^.*?出处.*?\n?', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'^.*?来源.*?\n?', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    
+    # 移除末尾的版权信息
+    text = re.sub(r'\n.*?版权.*?$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'\n.*?免责声明.*?$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'\n.*?编辑.*?$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'\n.*?责编.*?$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'\n.*?作者.*?$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'\n.*?出处.*?$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'\n.*?来源.*?$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    
+    # 移除重复的标题
+    lines = text.split('\n')
+    unique_lines = []
+    seen_lines = set()
+    
+    for line in lines:
+        stripped_line = line.strip()
+        if stripped_line and stripped_line not in seen_lines and len(stripped_line) > 10:
+            unique_lines.append(stripped_line)
+            seen_lines.add(stripped_line)
+    
+    text = '\n'.join(unique_lines)
+    
     return text
 
 
@@ -287,7 +336,8 @@ class UnifiedRunner:
         self.crawler_classes = {
            'xinhua': XinhuaCrawler, 'people': PeopleCrawler, 'cctv': CCTVcrawler,
             'chinanews': ChinanewsCrawler, 'reuters': ReutersCrawler, 'ce': CeCrawler,
-            'bbc': BBCcrawler, 'apnews': APNewsCrawler, 'guardian': GuardianCrawler
+            'bbc': BBCcrawler, 'apnews': APNewsCrawler, 'guardian': GuardianCrawler,
+            'france24': France24Crawler, 'nhk': NHKCrawler
         }
         self.extractor = RSSContentExtractor()
 

@@ -19,4 +19,4 @@ LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 # 输出配置
 OUTPUT_ENCODING = "utf-8"
-MAX_NEWS_COUNT = 10  # 每个源最大抓取新闻条数
+MAX_NEWS_COUNT = 40  # 每个源最大抓取新闻条数

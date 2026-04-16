@@ -166,6 +166,10 @@ def _clean_extracted_texts(texts: List[str], max_length: int = 10000) -> str:
             len(text) > 2000):  # 避免单个过长的块（可能是导航或侧边栏）
             continue
         
+        # 更严格的过滤：移除包含版权、编辑、责编等信息的段落
+        if re.search(r'(版权|版权所有|免责声明|联系我们|编辑|责编|发布者|来源|转载|引用|原文链接|出处|作者|记者|通讯员|报道|整理|校对|扫描二维码|关注.*公众号|订阅.*|广告|推荐|相关文章|热门文章|评论|留言|反馈)', text, re.I):
+            continue
+        
         seen.add(text)
         cleaned.append(text)
         
@@ -215,7 +219,11 @@ def fetch_article_content(url: str, logger: Optional[logging.Logger] = None) -> 
             '.sidebar', '.related', '.recommended', '.share', '.social', '.comment',
             '.pagination', '.copyright', '.p-copyright', '.shouquan', '.function',
             '.ebm', '.video-box', '.player', '.download', '.scan-code', '.qrcode',
-            '.author-info', '.publish-time', '.tags', '.categories'
+            '.author-info', '.publish-time', '.tags', '.categories', '.meta',
+            '.article-info', '.post-meta', '.article-meta', '.news-meta',
+            '.breadcrumb', '.toolbar', '.nav', '.navigation', '.more-stories',
+            '.related-articles', '.recommended-articles', '.article-tags',
+            '.article-nav', '.read-next', '.post-navigation'
         ]
         for element in soup(blocked_elements):
             element.decompose()
@@ -233,8 +241,8 @@ def fetch_article_content(url: str, logger: Optional[logging.Logger] = None) -> 
             text = p.get_text(strip=True)
             if (text and len(text) > 20 and len(text) < 2000 and 
                 text not in seen_texts):
-                # 过滤版权等信息
-                if not re.search(r'版权 | 所有 | 转载 | 编辑 | 责编 | 分享 | 扫码', text, re.I):
+                # 更严格的过滤版权等信息
+                if not re.search(r'(版权|版权所有|免责声明|联系我们|编辑|责编|发布者|来源|转载|引用|原文链接|出处|作者|记者|通讯员|报道|整理|校对|扫描二维码|关注.*公众号|订阅.*|广告|推荐|相关文章|热门文章|评论|留言|反馈)', text, re.I):
                     all_texts.append(text)
                     seen_texts.add(text)
         
@@ -244,7 +252,7 @@ def fetch_article_content(url: str, logger: Optional[logging.Logger] = None) -> 
             text = tag.get_text(strip=True)
             if (text and 10 < len(text) < 200 and 
                 text not in seen_texts and
-                not re.search(r'版权 | 所有', text, re.I)):
+                not re.search(r'(版权|所有|发布者|来源|编辑|责编|记者|通讯员|整理|校对)', text, re.I)):
                 all_texts.insert(0, text)  # 标题放前面
                 seen_texts.add(text)
         
@@ -252,8 +260,10 @@ def fetch_article_content(url: str, logger: Optional[logging.Logger] = None) -> 
         dense_texts = _extract_text_with_density(main_container, min_density=0.25)
         for text in dense_texts:
             if text not in seen_texts and len(text) > 30:
-                all_texts.append(text)
-                seen_texts.add(text)
+                # 过滤版权和不相关内容
+                if not re.search(r'(版权|版权所有|免责声明|联系我们|编辑|责编|发布者|来源|转载|引用|原文链接|出处|作者|记者|通讯员|报道|整理|校对|扫描二维码|关注.*公众号|订阅.*|广告|推荐|相关文章|热门文章|评论|留言|反馈)', text, re.I):
+                    all_texts.append(text)
+                    seen_texts.add(text)
         
         # 策略 4: 如果内容太少，尝试从整个页面提取
         if len(all_texts) < 3:
@@ -262,14 +272,33 @@ def fetch_article_content(url: str, logger: Optional[logging.Logger] = None) -> 
                 text = div.get_text(strip=True)
                 if (50 < len(text) < 1500 and 
                     text not in seen_texts and
-                    not re.search(r'版权 | 所有 | 转载 | 编辑', text, re.I)):
+                    not re.search(r'(版权|所有|发布者|编辑|责编|来源|转载|引用|原文链接|出处|作者|记者|通讯员|报道|整理|校对|扫描二维码|关注.*公众号|订阅.*|广告|推荐|相关文章|热门文章|评论|留言|反馈)', text, re.I)):
                     # 检查是否与已有文本重复
                     if not any(len(t) - 50 < len(text) < len(t) + 50 for t in all_texts):
                         all_texts.append(text)
                         seen_texts.add(text)
         
+        # 额外策略 5: 检测并过滤重复段落（避免连续相同内容）
+        deduplicated_texts = []
+        for i, text in enumerate(all_texts):
+            is_duplicate = False
+            for j, existing_text in enumerate(deduplicated_texts):
+                # 检查两个文本是否有高度重叠（去除空格后相似度很高）
+                clean_text = re.sub(r'\s+', '', text)
+                clean_existing = re.sub(r'\s+', '', existing_text)
+                
+                # 如果一个文本是另一个的子集且占比较高，则认为是重复
+                if len(clean_text) > 0 and len(clean_existing) > 0:
+                    if clean_text in clean_existing or clean_existing in clean_text:
+                        if abs(len(clean_text) - len(clean_existing)) < max(len(clean_text), len(clean_existing)) * 0.3:
+                            is_duplicate = True
+                            break
+            
+            if not is_duplicate:
+                deduplicated_texts.append(text)
+        
         # 清理和合并
-        content = _clean_extracted_texts(all_texts)
+        content = _clean_extracted_texts(deduplicated_texts)
         
         if content:
             logger.info(f"Successfully extracted content from {url}, length: {len(content)} chars")
