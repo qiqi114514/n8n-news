@@ -182,13 +182,14 @@ def _clean_extracted_texts(texts: List[str], max_length: int = 10000) -> str:
 
 
 def fetch_article_content(url: str, logger: Optional[logging.Logger] = None) -> str:
-    """抓取文章正文内容（优化版）
+    """抓取文章正文内容（增强版）
     
     使用多种策略提取正文：
     1. 语义化标签识别（article, main, section）
-    2. CSS 类名/ID 模式匹配
+    2. CSS 类名/ID 模式匹配（扩展模式）
     3. 文本密度分析
     4. 段落数量统计
+    5. 标题和子标题提取
     
     Args:
         url: 文章 URL
@@ -207,28 +208,65 @@ def fetch_article_content(url: str, logger: Optional[logging.Logger] = None) -> 
         
         soup = BeautifulSoup(html, 'lxml')
         
-        # 移除干扰元素
-        for element in soup(['script', 'style', 'noscript', 'nav', 'footer', 
-                            'header', 'aside', 'iframe', 'form', 'advertisement', 
-                            '.ad', '.ads', '.advert', '#ad', '#ads']):
+        # 移除干扰元素（扩展列表）
+        blocked_elements = [
+            'script', 'style', 'noscript', 'nav', 'footer', 'header', 'aside',
+            'iframe', 'form', 'advertisement', '.ad', '.ads', '.advert', '#ad', '#ads',
+            '.sidebar', '.related', '.recommended', '.share', '.social', '.comment',
+            '.pagination', '.copyright', '.p-copyright', '.shouquan', '.function',
+            '.ebm', '.video-box', '.player', '.download', '.scan-code', '.qrcode',
+            '.author-info', '.publish-time', '.tags', '.categories'
+        ]
+        for element in soup(blocked_elements):
             element.decompose()
         
         # 智能查找主内容区域
         main_container = _find_main_content(soup)
         
-        # 提取文本：结合传统段落提取和密度分析
+        # 多策略提取文本
         all_texts = []
+        seen_texts = set()
         
-        # 方法 1: 提取段落
+        # 策略 1: 提取段落（主要来源）
         paragraphs = main_container.find_all(['p'])
         for p in paragraphs:
             text = p.get_text(strip=True)
-            if text:
-                all_texts.append(text)
+            if (text and len(text) > 20 and len(text) < 2000 and 
+                text not in seen_texts):
+                # 过滤版权等信息
+                if not re.search(r'版权 | 所有 | 转载 | 编辑 | 责编 | 分享 | 扫码', text, re.I):
+                    all_texts.append(text)
+                    seen_texts.add(text)
         
-        # 方法 2: 密度分析提取（补充段落遗漏的内容）
+        # 策略 2: 提取标题和子标题
+        title_tags = main_container.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+        for tag in title_tags:
+            text = tag.get_text(strip=True)
+            if (text and 10 < len(text) < 200 and 
+                text not in seen_texts and
+                not re.search(r'版权 | 所有', text, re.I)):
+                all_texts.insert(0, text)  # 标题放前面
+                seen_texts.add(text)
+        
+        # 策略 3: 密度分析提取（补充遗漏内容）
         dense_texts = _extract_text_with_density(main_container, min_density=0.25)
-        all_texts.extend(dense_texts)
+        for text in dense_texts:
+            if text not in seen_texts and len(text) > 30:
+                all_texts.append(text)
+                seen_texts.add(text)
+        
+        # 策略 4: 如果内容太少，尝试从整个页面提取
+        if len(all_texts) < 3:
+            # 查找所有包含较多文本的 div
+            for div in soup.find_all('div'):
+                text = div.get_text(strip=True)
+                if (50 < len(text) < 1500 and 
+                    text not in seen_texts and
+                    not re.search(r'版权 | 所有 | 转载 | 编辑', text, re.I)):
+                    # 检查是否与已有文本重复
+                    if not any(len(t) - 50 < len(text) < len(t) + 50 for t in all_texts):
+                        all_texts.append(text)
+                        seen_texts.add(text)
         
         # 清理和合并
         content = _clean_extracted_texts(all_texts)
