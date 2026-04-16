@@ -1,0 +1,58 @@
+INFO:root:Saved 80 news to /app/news.db
+ERROR:root:Error in save_raw: 'str' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/app/save_raw.py", line 51, in main
+    item_id = item.get("id") or f"{item.get('source', 'unknown')}_{item.get('title', '')[:50]}"
+              ^^^^^^^^
+AttributeError: 'str' object has no attribute 'get'
+ERROR:root:Error in save_raw: 'str' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/app/save_raw.py", line 51, in main
+    item_id = item.get("id") or f"{item.get('source', 'unknown')}_{item.get('title', '')[:50]}"
+              ^^^^^^^^
+AttributeError: 'str' object has no attribute 'get'
+INFO:root:Saved 10 news to /app/news.db
+INFO:root:Saved 10 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db
+INFO:root:Saved 20 news to /app/news.db

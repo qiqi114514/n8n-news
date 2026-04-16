@@ -1,0 +1,40 @@
+ERROR:root:Error in query_pending: no such table: news_raw
+Traceback (most recent call last):
+  File "/app/query_pending.py", line 35, in main
+    cursor.execute(query)
+sqlite3.OperationalError: no such table: news_raw
+INFO:root:Queried 0 tag groups
+INFO:root:Queried 1 tag groups
+INFO:root:Queried 1 tag groups
+INFO:root:Queried 1 tag groups
+INFO:root:Queried 1 tag groups
+INFO:root:Queried 1 tag groups
+INFO:root:Queried 1 tag groups
+ERROR:root:Error in query_pending: cannot access local variable 'tags' where it is not associated with a value
+Traceback (most recent call last):
+  File "/app/query_pending.py", line 44, in main
+    for t in tags:
+             ^^^^
+UnboundLocalError: cannot access local variable 'tags' where it is not associated with a value
+ERROR:root:Error in query_pending: cannot access local variable 'tags' where it is not associated with a value
+Traceback (most recent call last):
+  File "/app/query_pending.py", line 44, in main
+    for t in tags:
+             ^^^^
+UnboundLocalError: cannot access local variable 'tags' where it is not associated with a value
+ERROR:root:Error in query_pending: cannot access local variable 'tags' where it is not associated with a value
+Traceback (most recent call last):
+  File "/app/query_pending.py", line 44, in main
+    for t in tags:
+             ^^^^
+UnboundLocalError: cannot access local variable 'tags' where it is not associated with a value
+INFO:root:Queried 1 tag groups
+INFO:root:Queried 1 tag groups
+INFO:root:Queried 0 tag groups
+INFO:root:Queried 0 tag groups
+INFO:root:Queried 1 tag groups
+INFO:root:Queried 0 tag groups
+INFO:root:Queried 0 tag groups
+INFO:root:Queried 5 tag groups
+INFO:root:Queried 3 tag groups
+INFO:root:Queried 6 tag groups

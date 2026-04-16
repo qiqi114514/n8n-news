@@ -1,0 +1,39 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n-news
+    restart: unless-stopped
+    ports:
+      - "5679:5678"
+    environment:
+      - N8N_SECURE_COOKIE=false
+      - GENERIC_TIMEZONE=Asia/Shanghai
+      - TZ=Asia/Shanghai
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=72
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - python-runner
+    networks:
+      - news-net
+
+  python-runner:
+    build: .
+    container_name: python-runner
+    restart: unless-stopped
+    # ADD THESE LIMITS:
+    mem_limit: 1024m
+    cpu_shares: 512
+    volumes:
+      - ./scripts:/app:rw
+    ports:
+      - "8000:8000"
+    networks:
+      - news-net
+
+volumes:
+  n8n_data:
+
+networks:
+  news-net:
