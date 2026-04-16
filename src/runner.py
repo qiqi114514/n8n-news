@@ -31,261 +31,225 @@ logger = logging.getLogger("UnifiedRunner")
 
 class RSSContentExtractor:
     """
-    通用的 RSS 文章正文提取器
-    支持多种提取策略和自动回退机制，适配不同网站结构
+    智能 RSS 正文提取器
+    策略：通过评分系统找到最可能的正文容器，避免重复和噪音
     """
     
-    # 常见干扰元素的 CSS 选择器
-    BLOCKED_ELEMENTS = [
-        'script', 'style', 'noscript', 'nav', 'footer', 'header', 
-        'aside', 'iframe', 'form', 'advertisement', '.ad', '.ads', 
-        '.advert', '#ad', '#ads', '.sidebar', '.related', '.recommended',
-        '.share', '.social', '.comment', '.pagination'
+    # 干扰元素选择器 (直接移除)
+    NEGATIVE_PATTERNS = [
+        'script', 'style', 'iframe', 'noscript', 'meta', 'link', 'svg',
+        '.advertisement', '.ads', '.sidebar', '.footer', '.header',
+        '.nav', '.menu', '.share', '.social', '.comment', '.related',
+        '[class*="ad-"]', '[id*="ad-"]', '[class*="share"]', '[id*="share"]',
+        '[class*="copyright"]', '[id*="copyright"]', '[class*="disclaimer"]'
     ]
-    
-    # 正文结束的常见标记
-    END_MARKERS = [
-        r'\(完\)', r'【编辑:', r'\[编辑:', r'责任编辑', r'（完）',
-        r'THE END', r'▼', r'___', r'\* \*'
+
+    # 正文特征关键词 (加分项)
+    POSITIVE_PATTERNS = [
+        'content', 'article', 'post', 'body', 'main', 'story', 'text',
+        'entry', 'detail', 'news', 'information', 'description'
     ]
-    
-    # 无用文本模式
-    USELESS_PATTERNS = [
-        r'^copyright', r'^©', r'^all rights', r'^privacy policy',
-        r'^terms of use', r'^分享到', r'^扫描二维码', r'^点击打开'
+
+    # 负面特征关键词 (减分项)
+    NEGATIVE_KEYWORDS = [
+        'copyright', '广告', '推荐', '相关阅读', '猜你喜欢', '分享到',
+        '二维码', '扫一扫', '责编', '编辑', '来源', '版权声明', '免责声明'
     ]
-    
-    def __init__(self, logger: Optional[logging.Logger] = None):
-        self.logger = logger or logging.getLogger(__name__)
-    
+
     def extract(self, url: str, html: str, source_name: str = "") -> str:
         """
-        提取文章正文，使用多级策略
-        
-        Args:
-            url: 文章 URL
-            html: 页面 HTML 内容
-            source_name: 来源名称，用于特殊处理
-            
-        Returns:
-            提取的正文内容
+        主入口：提取正文
         """
         if not html:
             return ""
+
+        soup = BeautifulSoup(html, 'lxml')
         
-        try:
-            soup = BeautifulSoup(html, 'lxml')
-            
-            # 步骤 1: 移除干扰元素
-            self._remove_blocked_elements(soup)
-            
-            # 步骤 2: 尝试多种提取策略
-            content = self._try_extraction_strategies(soup, url, source_name)
-            
-            # 步骤 3: 清洗和后处理
-            content = self._clean_content(content, source_name)
-            
-            if content:
-                self.logger.info(f"Extracted {len(content)} chars from {url}")
-            else:
-                self.logger.warning(f"No content extracted from {url}")
-            
-            return content
-            
-        except Exception as e:
-            self.logger.error(f"Extraction failed for {url}: {e}", exc_info=True)
-            return ""
+        # 1. 预处理：移除干扰元素
+        self._remove_noise(soup)
+        
+        # 2. 特殊源处理 (针对中新网、央视等做特定清洗)
+        self._handle_source_specific(soup, url, source_name)
+
+        # 3. 核心策略：评分查找最佳正文容器
+        best_container = self._find_best_container(soup)
+        
+        if best_container:
+            text = self._clean_container_text(best_container)
+            if len(text) > 50:  # 只有长度足够才返回
+                return text
+        
+        # 4. 降级策略：如果找不到容器，尝试直接提取所有段落并去重
+        return self._fallback_extract(soup)
     
-    def _remove_blocked_elements(self, soup: BeautifulSoup):
-        """移除干扰元素"""
-        for selector in self.BLOCKED_ELEMENTS:
-            for element in soup.select(selector):
-                element.decompose()
-    
-    def _try_extraction_strategies(self, soup: BeautifulSoup, url: str, source_name: str) -> str:
-        """尝试多种提取策略，按优先级返回第一个成功的结果"""
-        
-        strategies = [
-            ("semantic_tags", self._extract_by_semantic_tags),
-            ("css_patterns", self._extract_by_css_patterns),
-            ("density_analysis", self._extract_by_density),
-            ("paragraph_count", self._extract_by_paragraph_count),
-            ("fallback", self._extract_fallback)
-        ]
-        
-        for strategy_name, strategy_func in strategies:
+    def _remove_noise(self, soup: BeautifulSoup):
+        """移除已知的干扰元素"""
+        for pattern in self.NEGATIVE_PATTERNS:
             try:
-                self.logger.debug(f"Trying strategy: {strategy_name} for {url}")
-                content = strategy_func(soup, url, source_name)
-                if content and len(content.strip()) > 50:
-                    self.logger.info(f"Success with strategy: {strategy_name}")
-                    return content
-            except Exception as e:
-                self.logger.debug(f"Strategy {strategy_name} failed: {e}")
+                elements = soup.select(pattern)
+                for el in elements:
+                    el.decompose()
+            except Exception:
                 continue
+
+    def _handle_source_specific(self, soup: BeautifulSoup, url: str, source_name: str):
+        """针对特定网站的特殊处理"""
         
-        return ""
-    
-    def _extract_by_semantic_tags(self, soup: BeautifulSoup, url: str, source_name: str) -> str:
-        """策略 1: 语义化标签提取"""
-        for tag_name in ['article', 'main', 'section']:
-            tag = soup.find(tag_name)
-            if tag:
-                return self._extract_text_from_element(tag)
-        return ""
-    
-    def _extract_by_css_patterns(self, soup: BeautifulSoup, url: str, source_name: str) -> str:
-        """策略 2: CSS 类名/ID 模式匹配"""
-        patterns = [
-            r'articl', r'content', r'post', r'entry', r'story',
-            r'body', r'main', r'wrap', r'detail', r'news', r'artical'
-        ]
+        # --- 中新网特殊处理 ---
+        if 'chinanews.com' in url or 'chinanews' in source_name.lower():
+            # 移除头部重复标题 (不在正文区域的 h1)
+            for h1 in soup.find_all('h1'):
+                parent_class = " ".join(h1.parent.get('class', [])) if h1.parent else ""
+                if 'left_zw' not in parent_class and 'content' not in parent_class:
+                    h1.decompose()
+            # 移除特定的版权行
+            for p in soup.find_all('p'):
+                txt = p.get_text(strip=True)
+                if any(k in txt for k in ['责编', '编辑', '【', '】', '版权声明', '(完)']):
+                    p.decompose()
+
+        # --- 央视网特殊处理 ---
+        elif 'cctv.com' in url or 'cctv' in source_name.lower():
+            # 移除所有包含"视频简介"但内容极短的块，防止误判为正文
+            for tag in soup.find_all(lambda t: t.name and '简介' in t.get_text(strip=True)[:10]):
+                if len(tag.get_text(strip=True)) < 50:
+                    tag.decompose()
+            # 移除明显的版权信息块
+            for div in soup.find_all('div'):
+                txt = div.get_text(strip=True)
+                if '版权所有' in txt or 'CCTV' in txt and len(txt) < 100:
+                    div.decompose()
+
+    def _find_best_container(self, soup: BeautifulSoup):
+        """
+        评分算法：遍历所有包含文本的标签，计算得分，返回最高分的标签
+        评分规则：
+        + 文本长度 (主要权重)
+        + 包含 <p> 标签数量
+        + 命中正面关键词
+        - 命中负面关键词
+        - 文本密度过低 (说明链接/代码太多)
+        """
+        candidates = []
         
-        for pattern in patterns:
-            # 查找 class
-            tag = soup.find(class_=re.compile(pattern, re.I))
-            if tag:
-                content = self._extract_text_from_element(tag)
-                if len(content) > 100:
-                    return content
+        # 只遍历可能包含正文的标签
+        for tag in soup.find_all(['div', 'section', 'article', 'td']):
+            text = tag.get_text(separator=' ', strip=True)
+            if len(text) < 50:  # 太短的忽略
+                continue
             
-            # 查找 id
-            tag = soup.find(id=re.compile(pattern, re.I))
-            if tag:
-                content = self._extract_text_from_element(tag)
-                if len(content) > 100:
-                    return content
+            score = 0
+            
+            # 1. 文本长度分 (每 10 字得 1 分，上限 50 分)
+            score += min(len(text) / 10, 50)
+            
+            # 2. 段落分 (每个 <p> 得 5 分)
+            p_count = len(tag.find_all('p'))
+            score += p_count * 5
+            
+            # 3. 关键词加分/减分
+            class_str = " ".join(tag.get('class', [])) + " " + tag.get('id', '')
+            for word in self.POSITIVE_PATTERNS:
+                if word in class_str or word in tag.name:
+                    score += 10
+            
+            for word in self.NEGATIVE_KEYWORDS:
+                if word in text or word in class_str:
+                    score -= 20
+            
+            # 4. 密度惩罚 (如果链接文本占比超过 30%，扣分)
+            links_text = " ".join([a.get_text(strip=True) for a in tag.find_all('a')])
+            if len(text) > 0:
+                link_ratio = len(links_text) / len(text)
+                if link_ratio > 0.3:
+                    score -= 15
+            
+            candidates.append((score, tag))
+
+        if not candidates:
+            return None
         
-        return ""
-    
-    def _extract_by_density(self, soup: BeautifulSoup, url: str, source_name: str) -> str:
-        """策略 3: 文本密度分析"""
-        def calculate_density(tag):
-            if not hasattr(tag, 'get_text'):
-                return 0.0
-            html_len = len(str(tag))
-            if html_len == 0:
-                return 0.0
-            text_len = len(tag.get_text(strip=True))
-            return text_len / html_len
+        # 按分数排序，取最高分
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        best_score, best_tag = candidates[0]
         
-        # 查找所有 div，计算密度
-        all_divs = soup.find_all(['div', 'section', 'article'])
-        if not all_divs:
-            return ""
+        # 只有分数达到一定阈值才认为是正文 (防止抓取到侧边栏列表)
+        if best_score > 20 or (len(best_tag.find_all('p')) >= 1 and best_score > 10):
+            logger.debug(f"Best container found with score {best_score}: {best_tag.name} class={best_tag.get('class')}")
+            return best_tag
         
-        # 按密度排序
-        scored_divs = [(calculate_density(d), len(d.get_text(strip=True)), d) for d in all_divs]
-        scored_divs = [(d, score, text_len) for score, text_len, d in scored_divs 
-                       if score > 0.2 and text_len > 100]
-        
-        if scored_divs:
-            # 取密度最高且文本量足够的
-            best = max(scored_divs, key=lambda x: (x[1], x[2]))
-            return self._extract_text_from_element(best[0])
-        
-        return ""
-    
-    def _extract_by_paragraph_count(self, soup: BeautifulSoup, url: str, source_name: str) -> str:
-        """策略 4: 段落数量统计"""
-        all_divs = soup.find_all('div')
-        if not all_divs:
-            return ""
-        
-        def count_paragraphs(div):
-            return len(div.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']))
-        
-        best_div = max(all_divs, key=count_paragraphs)
-        if count_paragraphs(best_div) >= 3:
-            return self._extract_text_from_element(best_div)
-        
-        return ""
-    
-    def _extract_fallback(self, soup: BeautifulSoup, url: str, source_name: str) -> str:
-        """策略 5: 回退方案 - 提取所有段落"""
-        paragraphs = soup.find_all('p')
-        texts = [p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)]
-        return '\n\n'.join(texts)
-    
-    def _extract_text_from_element(self, element) -> str:
-        """从元素中提取并清理文本"""
-        if not element:
-            return ""
-        
-        # 提取所有段落
-        paragraphs = element.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
-        if not paragraphs:
-            # 如果没有段落，直接获取文本
-            text = element.get_text(separator='\n', strip=True)
-            return self._normalize_text(text)
-        
+        return None
+
+    def _clean_container_text(self, container) -> str:
+        """
+        清理容器内的文本：
+        1. 移除子级干扰
+        2. 提取文本
+        3. 去重行
+        """
+        # 再次清理容器内部的残留干扰
+        for el in container.find_all(['script', 'style', 'img']):
+            el.decompose()
+
         texts = []
+        seen_lines = set()
+        
+        # 优先提取 p 标签，如果没有 p 则提取所有文本
+        paragraphs = container.find_all('p')
+        if not paragraphs:
+            paragraphs = [container]
+            
         for p in paragraphs:
-            text = p.get_text(strip=True)
-            if text and len(text) > 10:
-                texts.append(text)
-        
-        return '\n\n'.join(texts)
-    
-    def _normalize_text(self, text: str) -> str:
-        """标准化文本格式"""
-        # 替换多个空白字符为单个空格
-        text = re.sub(r'\s+', ' ', text)
-        # 去除首尾空白
-        text = text.strip()
-        return text
-    
-    def _clean_content(self, content: str, source_name: str) -> str:
-        """清洗正文内容"""
-        if not content:
-            return ""
-        
-        lines = content.split('\n')
-        cleaned_lines = []
-        
-        for line in lines:
-            line = line.strip()
+            line = p.get_text(separator=' ', strip=True)
             if not line:
                 continue
             
-            # 检查是否为无用文本
-            is_useless = False
-            for pattern in self.USELESS_PATTERNS:
-                if re.match(pattern, line, re.I):
-                    is_useless = True
-                    break
-            
-            if is_useless:
+            # 过滤短行和负面行
+            if len(line) < 5:
+                continue
+            if any(k in line for k in ['版权声明', '责任编辑', '扫码下载', '分享到', '版权所有']):
                 continue
             
-            cleaned_lines.append(line)
+            # 简单的去重：如果这一行完全出现过，跳过
+            if line in seen_lines:
+                continue
+            
+            # 避免包含大量标题的重复 (如果一行和上一行相似度极高)
+            if texts and len(line) > 10 and line in texts[-1]:
+                continue
+                
+            seen_lines.add(line)
+            texts.append(line)
         
-        content = '\n'.join(cleaned_lines)
+        return "\n\n".join(texts)
+
+    def _fallback_extract(self, soup: BeautifulSoup) -> str:
+        """
+        降级方案：当找不到明显容器时，收集所有符合条件的段落
+        """
+        paragraphs = soup.find_all('p')
+        valid_texts = []
+        seen = set()
         
-        # 特殊来源处理
-        content = self._handle_source_specific(content, source_name)
+        for p in paragraphs:
+            txt = p.get_text(strip=True)
+            if len(txt) < 20:
+                continue
+            if any(k in txt for k in ['copyright', '版权所有', '广告']):
+                continue
+            if txt in seen:
+                continue
+            
+            seen.add(txt)
+            valid_texts.append(txt)
         
-        # 截断过长内容
-        if len(content) > 10000:
-            content = content[:10000] + '...'
-        
-        return content
-    
-    def _handle_source_specific(self, content: str, source_name: str) -> str:
-        """针对特定来源的特殊处理"""
-        source_lower = source_name.lower()
-        
-        # 中新网特殊处理
-        if 'chinanews' in source_lower or '中新网' in source_name:
-            for marker in self.END_MARKERS:
-                match = re.search(marker, content)
-                if match:
-                    content = content[:match.start()]
-                    break
-        
-        # 其他来源的特殊规则可以在这里添加
-        
-        return content
+        # 如果收集到的文本太少，尝试提取 body 全文
+        if len(valid_texts) < 2:
+            body = soup.find('body')
+            if body:
+                return body.get_text(separator='\n', strip=True)[:2000]
+                
+        return "\n\n".join(valid_texts)
 
 
 def clean_content(text, source):
@@ -325,7 +289,7 @@ class UnifiedRunner:
             'chinanews': ChinanewsCrawler, 'reuters': ReutersCrawler, 'ce': CeCrawler,
             'bbc': BBCcrawler, 'apnews': APNewsCrawler, 'guardian': GuardianCrawler
         }
-        self.extractor = RSSContentExtractor(logger)
+        self.extractor = RSSContentExtractor()
 
     def fetch_rss_task(self, task, max_count):
         results = []
@@ -337,7 +301,7 @@ class UnifiedRunner:
                 # 获取 HTML 内容
                 html = fetch_html(entry.link, logger)
                 
-                # 使用新的提取器
+                # 使用新的提取器 (移除 logger 参数)
                 raw_content = self.extractor.extract(entry.link, html or "", task['name'])
                 
                 # 如果提取失败，回退到 RSS summary
