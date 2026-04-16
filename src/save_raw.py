@@ -10,7 +10,10 @@ from datetime import datetime
 
 # 路径配置
 BASE_DIR = '/app' if os.path.exists('/app') else os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, 'news.db')
+# 数据库文件现在位于 data/ 目录
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).parent.parent
+DB_PATH = str(PROJECT_ROOT / 'data' / 'news.db')
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)

@@ -14,16 +14,24 @@ from datetime import datetime
 from typing import List, Dict, Any
 from pathlib import Path
 
-from crawlers.xinhua import XinhuaCrawler
-from crawlers.reuters import ReutersCrawler
-from crawlers.people import PeopleCrawler
-from crawlers.cctv import CCTVcrawler
-from crawlers.chinanews import ChinanewsCrawler
-from crawlers.ce import CeCrawler
-from crawlers.bbc import BBCcrawler
-from crawlers.apnews import APNewsCrawler
-from crawlers.guardian import GuardianCrawler
-from config import MAX_NEWS_COUNT
+# 添加项目根目录到 Python 路径
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.crawlers.xinhua import XinhuaCrawler
+from src.crawlers.reuters import ReutersCrawler
+from src.crawlers.people import PeopleCrawler
+from src.crawlers.cctv import CCTVcrawler
+from src.crawlers.chinanews import ChinanewsCrawler
+from src.crawlers.ce import CeCrawler
+from src.crawlers.bbc import BBCcrawler
+from src.crawlers.apnews import APNewsCrawler
+from src.crawlers.guardian import GuardianCrawler
+from src.config import MAX_NEWS_COUNT
+
+# 默认数据目录
+DATA_DIR = PROJECT_ROOT / "data"
+DEFAULT_ARCHIVE_FILE = DATA_DIR / "raw" / "news_archive.json"
 
 # 爬虫映射表
 CRAWLER_MAP = {
@@ -37,9 +45,6 @@ CRAWLER_MAP = {
     'apnews': APNewsCrawler,
     'guardian': GuardianCrawler,
 }
-
-# 默认档案文件路径
-DEFAULT_ARCHIVE_FILE = "news_archive.json"
 
 
 def load_archive(archive_path: str) -> List[Dict[str, Any]]:
