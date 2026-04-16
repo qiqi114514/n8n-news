@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """人民网爬虫"""
-
 from typing import List, Optional
 from datetime import datetime
+import re
 from bs4 import BeautifulSoup
-
 from crawlers.base import BaseCrawler, NewsItem
 from utils import fetch_html, parse_datetime, fetch_article_content
 
@@ -22,29 +21,20 @@ class PeopleCrawler(BaseCrawler):
         ]
     
     def fetch_news_list(self, max_count: int = 10) -> List[NewsItem]:
-        """抓取人民网新闻列表
-        
-        Args:
-            max_count: 最大抓取条数
-            
-        Returns:
-            NewsItem 列表
-        """
+        """抓取人民网新闻列表"""
         news_list = []
         seen_urls = set()
         
         for section_url in self.sections:
             if len(news_list) >= max_count:
                 break
-                
-            html = fetch_html(section_url, self.logger)
+            
+            html = fetch_html(section_url, self._get_logger())
             if not html:
                 continue
             
             try:
                 soup = BeautifulSoup(html, 'lxml')
-                
-                # 查找所有链接
                 links = soup.find_all('a', href=True)
                 
                 for link in links:
@@ -58,7 +48,7 @@ class PeopleCrawler(BaseCrawler):
                     if not title or not url or len(title) < 10:
                         continue
                     
-                    # 只保留包含 /n3/ 或年份的新闻链接
+                    # 只保留包含 /n3/ 或 /n/ 的新闻链接
                     if '/n3/' not in url and '/n/' not in url:
                         continue
                     
@@ -77,7 +67,7 @@ class PeopleCrawler(BaseCrawler):
                     publish_time = self._extract_publish_time(url)
                     
                     # 抓取正文内容
-                    content = fetch_article_content(url, self.logger)
+                    content = fetch_article_content(url, self._get_logger())
                     
                     news_item = NewsItem(
                         title=title,
@@ -89,12 +79,12 @@ class PeopleCrawler(BaseCrawler):
                     
                     if self.validate_news_item(news_item):
                         news_list.append(news_item)
-                        self.logger.info(f"Found news: {title[:50]}...")
+                        self._get_logger().info(f"Found news: {title[:50]}...")
             
             except Exception as e:
-                self.logger.error(f"Error parsing section {section_url}: {e}")
+                self._get_logger().error(f"Error parsing section {section_url}: {e}")
         
-        self.logger.info(f"Successfully fetched {len(news_list)} news from people.com.cn")
+        self._get_logger().info(f"Successfully fetched {len(news_list)} news from people.com.cn")
         return news_list
     
     def _extract_publish_time(self, url: str) -> Optional[datetime]:
@@ -104,7 +94,6 @@ class PeopleCrawler(BaseCrawler):
         http://en.people.cn/n3/2026/0409/c98649-20444969.html
         """
         try:
-            import re
             # 匹配 /YYYY/MMDD/ 格式
             pattern = r'/(\d{4})/(\d{2})(\d{2})/'
             match = re.search(pattern, url)

@@ -5,8 +5,6 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from utils import get_logger
-
 
 class NewsItem:
     """新闻条目数据类"""
@@ -40,31 +38,45 @@ class NewsItem:
 
 
 class BaseCrawler(ABC):
+    """爬虫抽象基类"""
+    
+    # 常用的 User-Agent 列表（类变量，避免重复创建）
+    USER_AGENTS = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Edge/121.0.0.0"
+    ]
+    
+    # 默认请求头模板
+    DEFAULT_HEADERS_TEMPLATE = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Cache-Control": "max-age=0",
+    }
+    
     def __init__(self, name: str = "base"):
         self.name = name
-        self.logger = get_logger(f"crawler.{name}")
+        self.logger = None  # 延迟初始化，避免循环导入问题
         
-        # ✅ 1. 定义一组常用的 User-Agent 列表
-        user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Edge/121.0.0.0"
-        ]
-        
-        # ✅ 2. 随机选择一个 UA 并完善 Headers
+        # 随机选择 UA 并完善 Headers
         self.headers = {
-            "User-Agent": random.choice(user_agents),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Cache-Control": "max-age=0",
+            "User-Agent": random.choice(self.USER_AGENTS),
+            **self.DEFAULT_HEADERS_TEMPLATE
         }
+    
+    def _get_logger(self):
+        """延迟获取 logger，避免循环导入"""
+        if self.logger is None:
+            from utils import get_logger
+            self.logger = get_logger(f"crawler.{self.name}")
+        return self.logger
     
     @abstractmethod
     def fetch_news_list(self, max_count: int = 10) -> List[NewsItem]:
@@ -76,12 +88,12 @@ class BaseCrawler(ABC):
         Returns:
             NewsItem 列表
         """
-        pass  # ✅ 抽象方法只保留 pass
+        pass
     
     def validate_news_item(self, item: NewsItem) -> bool:
         """验证新闻条目是否有效"""
         if not item.title or not item.url:
-            self.logger.warning(f"Invalid news item: missing title or url")
+            self._get_logger().warning(f"Invalid news item: missing title or url")
             return False
         return True
     
