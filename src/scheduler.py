@@ -21,14 +21,13 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.crawlers.xinhua import XinhuaCrawler
 from src.crawlers.reuters import ReutersCrawler
 from src.crawlers.people import PeopleCrawler
-from src.crawlers.cctv import CCTVcrawler
-from src.crawlers.chinanews import ChinanewsCrawler
 from src.crawlers.ce import CeCrawler
 from src.crawlers.bbc import BBCcrawler
 from src.crawlers.apnews import APNewsCrawler
 from src.crawlers.guardian import GuardianCrawler
 from src.crawlers.france24 import France24Crawler
 from src.crawlers.nhk import NHKCrawler
+from src.crawlers.dw import DWCrawler
 from src.config import MAX_NEWS_COUNT
 
 # 默认数据目录
@@ -40,14 +39,13 @@ CRAWLER_MAP = {
     'xinhua': XinhuaCrawler,
     'reuters': ReutersCrawler,
     'people': PeopleCrawler,
-    'cctv': CCTVcrawler,
-    'chinanews': ChinanewsCrawler,
     'ce': CeCrawler,
     'bbc': BBCcrawler,
     'apnews': APNewsCrawler,
     'guardian': GuardianCrawler,
     'france24': France24Crawler,
     'nhk': NHKCrawler,
+    'dw': DWCrawler,
 }
 
 
