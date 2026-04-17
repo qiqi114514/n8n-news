@@ -24,11 +24,11 @@ class CeCrawler(BaseCrawler):
             return []
         
         soup = BeautifulSoup(html, 'lxml')
-        # 标题导航页通常是 td 或 li 下的 a 标签
-        links = soup.select('.left_list li a, td a')
+        # 查找包含日期模式的新闻链接（如 /202604/t20260417_xxx.shtml）
+        all_links = soup.find_all('a', href=True)
         
         seen_urls = set()
-        for a in links:
+        for a in all_links:
             if len(news_list) >= max_count:
                 break
             
@@ -36,11 +36,11 @@ class CeCrawler(BaseCrawler):
             title = a.get_text(strip=True)
             
             # 补全相对路径
-            if url.startswith('.'):
-                url = "http://intl.ce.cn/qqss" + url.lstrip('.')
+            if url.startswith('./'):
+                url = "http://intl.ce.cn/qqss" + url[1:]
             
-            # 过滤无效链接
-            if 'http' not in url or len(title) < 10 or url in seen_urls:
+            # 过滤：需要包含日期模式且标题长度足够
+            if ('t2026' not in url and '/2026' not in url) or len(title) < 10 or url in seen_urls:
                 continue
             seen_urls.add(url)
             
