@@ -14,7 +14,7 @@ class XinhuaCrawler(BaseCrawler):
         super().__init__(name="xinhua")
         self.base_url = "http://www.news.cn/world/"
     
-    def fetch_news_list(self, max_count: int = 10) -> list[NewsItem]:
+    def fetch_news_list(self, max_count: int = 0) -> list[NewsItem]:
         """抓取新华社新闻列表"""
         news_list = []
         html = fetch_html(self.base_url, self._get_logger())
@@ -26,7 +26,7 @@ class XinhuaCrawler(BaseCrawler):
         seen_urls = set()
         
         for a in links:
-            if len(news_list) >= max_count:
+            if max_count > 0 and len(news_list) >= max_count:
                 break
             
             url = a.get('href', '')

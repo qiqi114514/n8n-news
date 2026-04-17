@@ -14,7 +14,7 @@ class ReutersCrawler(BaseCrawler):
         super().__init__(name="reuters")
         self.base_url = "https://www.reuters.com/world/"
     
-    def fetch_news_list(self, max_count: int = 10) -> list[NewsItem]:
+    def fetch_news_list(self, max_count: int = 0) -> list[NewsItem]:
         """抓取 Reuters 新闻列表"""
         news_list = []
         html = fetch_html(self.base_url, self._get_logger())
@@ -25,7 +25,7 @@ class ReutersCrawler(BaseCrawler):
         seen_urls = set()
         
         for a in soup.find_all('a', href=True):
-            if len(news_list) >= max_count:
+            if max_count > 0 and len(news_list) >= max_count:
                 break
             
             url = a['href']
