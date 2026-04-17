@@ -76,9 +76,28 @@ class CeCrawler(BaseCrawler):
             response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             
-            # 直接使用 GBK 解码字节内容
-            html = response.content.decode('gbk', errors='ignore')
+            # 尝试多种编码方式
+            html = None
+            # 首先检查 HTTP 头中的编码信息
+            encoding = response.encoding
+            if encoding and encoding.lower() in ['gbk', 'gb2312', 'cp936']:
+                try:
+                    html = response.content.decode(encoding, errors='strict')
+                except:
+                    pass
             
+            # 如果 HTTP 头没有正确编码，尝试 GBK
+            if not html:
+                try:
+                    html = response.content.decode('gbk', errors='strict')
+                except:
+                    try:
+                        html = response.content.decode('gb2312', errors='strict')
+                    except:
+                        # 最后尝试 utf-8
+                        html = response.content.decode('utf-8', errors='ignore')
+            
+            # 使用 lxml 解析器，它对中文支持更好
             soup = BeautifulSoup(html, 'lxml')
             
             # 移除干扰元素（注意：不要移除 form，因为中国经济网的文章内容在 form#formarticle 内）

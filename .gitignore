@@ -5,14 +5,27 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Build artifacts
-build/
-dist/
-*.egg-info/
+# Compiled and build artifacts
+*.o
+*.obj
+*.out
+*.so
+*.dll
+*.exe
 
-# Virtual environments
-venv/
+# Dependencies
 .venv/
+venv/
+env/
+requirements.txt.bak
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Environment
 .env
 .env.local
 *.env.*
@@ -23,16 +36,13 @@ venv/
 *.swp
 *.swo
 
-# Logs
-*.log
-
 # Coverage
 .coverage
 coverage/
 htmlcov/
 
-# Temporary files
-*.tmp
-.DS_Store
-Thumbs.db
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
 ```
