@@ -16,8 +16,6 @@ from bs4 import BeautifulSoup
 from crawlers.xinhua import XinhuaCrawler
 from crawlers.reuters import ReutersCrawler
 from crawlers.people import PeopleCrawler
-from crawlers.cctv import CCTVcrawler
-from crawlers.chinanews import ChinanewsCrawler
 from crawlers.ce import CeCrawler
 from crawlers.bbc import BBCcrawler
 from crawlers.apnews import APNewsCrawler
@@ -72,7 +70,7 @@ class RSSContentExtractor:
         # 1. 预处理：移除干扰元素
         self._remove_noise(soup)
         
-        # 2. 特殊源处理 (针对中新网、央视等做特定清洗)
+        # 2. 特殊源处理
         self._handle_source_specific(soup, url, source_name)
 
         # 3. 核心策略：评分查找最佳正文容器
@@ -98,31 +96,7 @@ class RSSContentExtractor:
 
     def _handle_source_specific(self, soup: BeautifulSoup, url: str, source_name: str):
         """针对特定网站的特殊处理"""
-        
-        # --- 中新网特殊处理 ---
-        if 'chinanews.com' in url or 'chinanews' in source_name.lower():
-            # 移除头部重复标题 (不在正文区域的 h1)
-            for h1 in soup.find_all('h1'):
-                parent_class = " ".join(h1.parent.get('class', [])) if h1.parent else ""
-                if 'left_zw' not in parent_class and 'content' not in parent_class:
-                    h1.decompose()
-            # 移除特定的版权行
-            for p in soup.find_all('p'):
-                txt = p.get_text(strip=True)
-                if any(k in txt for k in ['责编', '编辑', '【', '】', '版权声明', '(完)']):
-                    p.decompose()
-
-        # --- 央视网特殊处理 ---
-        elif 'cctv.com' in url or 'cctv' in source_name.lower():
-            # 移除所有包含"视频简介"但内容极短的块，防止误判为正文
-            for tag in soup.find_all(lambda t: t.name and '简介' in t.get_text(strip=True)[:10]):
-                if len(tag.get_text(strip=True)) < 50:
-                    tag.decompose()
-            # 移除明显的版权信息块
-            for div in soup.find_all('div'):
-                txt = div.get_text(strip=True)
-                if '版权所有' in txt or 'CCTV' in txt and len(txt) < 100:
-                    div.decompose()
+        pass
 
     def _find_best_container(self, soup: BeautifulSoup):
         """
@@ -274,18 +248,6 @@ def clean_content(text, source):
     """
     if not text:
         return ""
-    
-    # 针对中新网 (chinanews) 的特殊清洗
-    if "chinanews" in source.lower() or "中新网" in source:
-        # 1. 拦截 "(完)" 之后的所有推荐新闻标题
-        stop_keywords = [r"\(完\)", r"【编辑:", r"\[编辑:"]
-        for kw in stop_keywords:
-            parts = re.split(kw, text)
-            if len(parts) > 1:
-                text = parts[0]
-        
-        # 2. 通过双换行截断
-        text = re.split(r'\n\s*?\n', text)[0]
 
     # 通用清洗
     text = re.sub(r'\n+', '\n', text).strip()
@@ -329,13 +291,11 @@ class UnifiedRunner:
     def __init__(self):
         self.rss_tasks = [
             {"name": "澳门新闻局", "url": "https://govinfohub.gcs.gov.mo/api/rss/n/zh-hans"},
-            {"name": "cctv", "url": "https://rsshub.rssforever.com/cctv/world"},
-            {"name": "xinhua", "url": "https://rsshub.rssforever.com/news/whxw"},
-            {"name": "chinanews", "url": "http://rss.spriple.org/chinanews"}
+            {"name": "xinhua", "url": "https://rsshub.rssforever.com/news/whxw"}
         ]
         self.crawler_classes = {
-           'xinhua': XinhuaCrawler, 'people': PeopleCrawler, 'cctv': CCTVcrawler,
-            'chinanews': ChinanewsCrawler, 'reuters': ReutersCrawler, 'ce': CeCrawler,
+           'xinhua': XinhuaCrawler, 'people': PeopleCrawler, 
+             'reuters': ReutersCrawler, 'ce': CeCrawler,
             'bbc': BBCcrawler, 'apnews': APNewsCrawler, 'guardian': GuardianCrawler,
             'france24': France24Crawler, 'nhk': NHKCrawler
         }
