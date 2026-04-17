@@ -50,7 +50,7 @@ class APIHandler(BaseHTTPRequestHandler):
         script_path = os.path.join(os.path.dirname(__file__), SCRIPT_MAP[script_key])
         
         # 获取 count 参数，默认 5
-        count = params.get("count", 5)
+        count = params.get("count", 10)
         source = params.get("source", "all")
 
         try:

@@ -331,7 +331,9 @@ class UnifiedRunner:
             {"name": "澳门新闻局", "url": "https://govinfohub.gcs.gov.mo/api/rss/n/zh-hans"},
             {"name": "cctv", "url": "https://rsshub.rssforever.com/cctv/world"},
             {"name": "xinhua", "url": "https://rsshub.rssforever.com/news/whxw"},
-            {"name": "chinanews", "url": "http://rss.spriple.org/chinanews"}
+            {"name": "chinanews", "url": "http://rss.spriple.org/chinanews"},
+            {"name": "afp", "url": "https://rsshub.rssforever.com/twitter/user/afp"},
+            {"name": "afp", "url": "https://rsshub.rssforever.com/yahoo/news/provider/hk/afp.com.hk"}
         ]
         self.crawler_classes = {
            'xinhua': XinhuaCrawler, 'people': PeopleCrawler, 'cctv': CCTVcrawler,
