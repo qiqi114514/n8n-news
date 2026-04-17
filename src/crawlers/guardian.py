@@ -13,88 +13,58 @@ class GuardianCrawler(BaseCrawler):
     def __init__(self):
         super().__init__(name="guardian")
         self.base_url = "https://www.theguardian.com"
+        # 使用世界新闻页面获取最新新闻
+        self.world_url = "https://www.theguardian.com/world"
     
     def fetch_news_list(self, max_count: int = 10) -> List[NewsItem]:
         """抓取 The Guardian 新闻列表"""
         news_list = []
-        url = "https://www.theguardian.com"
-        html = fetch_html(url, self._get_logger())
-        
-        if not html:
-            self._get_logger().error("Failed to fetch theguardian.com")
-            return news_list
         
         try:
+            # 访问世界新闻页面
+            html = fetch_html(self.world_url, self._get_logger())
+            if not html:
+                self._get_logger().error("Failed to fetch theguardian.com/world")
+                return news_list
+            
             soup = BeautifulSoup(html, 'lxml')
-            articles = []
-            
-            # Guardian 常用的选择器
-            selectors = [
-                'article a',
-                '.fc-item__title a',
-                '[data-component="card"] a',
-                'a[href*="/world/"]',
-                'a[href*="/uk-news"]',
-                'a[href*="/politics"]',
-                '.js-snippet-headline a',
-                '.teaser a'
-            ]
-            
-            for selector in selectors:
-                elements = soup.select(selector)
-                if elements:
-                    articles.extend(elements)
-                    if len(articles) >= max_count * 2:
-                        break
-            
-            # 去重并处理
             seen_urls = set()
-            for item in articles:
+            
+            # 查找所有文章链接
+            for a in soup.find_all('a', href=True):
                 if len(news_list) >= max_count:
                     break
                 
-                # 获取标题和链接
-                if hasattr(item, 'get') and item.get('href'):
-                    title = item.get_text(strip=True)
-                    url = item['href']
-                else:
-                    a_tag = item.find('a') if hasattr(item, 'find') else item
-                    if a_tag and hasattr(a_tag, 'get'):
-                        title = a_tag.get_text(strip=True)
-                        url = a_tag.get('href', '')
-                    else:
-                        continue
+                href = a.get('href', '')
+                title = a.get_text(strip=True)
                 
-                if not title or not url:
+                # 过滤：需要是具体文章（包含日期模式），且标题长度足够
+                if not title or len(title) < 20:
+                    continue
+                if '/liveblog/' in href or '/about' in href or '/help' in href:
                     continue
                 
-                # 跳过空标题或太短的标题
-                if len(title) < 5:
+                # 检查是否是文章 URL（通常包含年份/月份/日期）
+                import re
+                if not re.search(r'/\d{4}/[a-z]{3}/\d{2}/', href):
                     continue
                 
                 # 处理相对路径
-                if url.startswith('/'):
-                    url = f"https://www.theguardian.com{url}"
-                elif not url.startswith('http'):
-                    continue
+                if href.startswith('/'):
+                    href = f"https://www.theguardian.com{href}"
                 
-                # 跳过非新闻页面
-                if any(skip in url.lower() for skip in ['/about', '/help', '/info', 'liveblog']):
+                if href in seen_urls:
                     continue
-                
-                # 去重
-                if url in seen_urls:
-                    continue
-                seen_urls.add(url)
+                seen_urls.add(href)
                 
                 # 抓取正文内容
-                content = fetch_article_content(url, self._get_logger())
+                content = fetch_article_content(href, self._get_logger())
                 
                 news_item = NewsItem(
                     title=title,
-                    url=url,
+                    url=href,
                     publish_time=datetime.now(),
-                    content=content,
+                    content=content or title,
                     source="guardian"
                 )
                 
@@ -105,6 +75,6 @@ class GuardianCrawler(BaseCrawler):
             self._get_logger().info(f"Successfully fetched {len(news_list)} news from theguardian.com")
         
         except Exception as e:
-            self._get_logger().error(f"Error parsing theguardian.com: {e}")
+            self._get_logger().error(f"Error fetching theguardian.com: {e}", exc_info=True)
         
         return news_list
