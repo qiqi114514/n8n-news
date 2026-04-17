@@ -21,8 +21,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.crawlers.xinhua import XinhuaCrawler
 from src.crawlers.reuters import ReutersCrawler
 from src.crawlers.people import PeopleCrawler
-from src.crawlers.cctv import CCTVcrawler
-from src.crawlers.chinanews import ChinanewsCrawler
 from src.crawlers.ce import CeCrawler
 from src.crawlers.bbc import BBCcrawler
 from src.crawlers.apnews import APNewsCrawler
@@ -40,8 +38,6 @@ CRAWLER_MAP = {
     'xinhua': XinhuaCrawler,
     'reuters': ReutersCrawler,
     'people': PeopleCrawler,
-    'cctv': CCTVcrawler,
-    'chinanews': ChinanewsCrawler,
     'ce': CeCrawler,
     'bbc': BBCcrawler,
     'apnews': APNewsCrawler,
