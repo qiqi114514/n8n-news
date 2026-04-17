@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """NHK World 爬虫"""
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 import re
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 from crawlers.base import BaseCrawler, NewsItem
 from utils import fetch_html, fetch_article_content
 
@@ -13,7 +13,28 @@ class NHKCrawler(BaseCrawler):
     
     def __init__(self):
         super().__init__(name="nhk")
-        self.base_url = "https://www3.nhk.or.jp/nhkworld/en/"
+        self.base_url = "https://www3.nhk.or.jp/nhkworld/en/news/list/"
+    
+    def _parse_date(self, date_str: str) -> Optional[datetime]:
+        """解析日期字符串"""
+        if not date_str:
+            return None
+        
+        # 尝试多种格式
+        formats = [
+            "%B %d, %Y",  # April 16, 2026
+            "%b %d, %Y",  # Apr 16, 2026
+            "%Y-%m-%d",
+            "%Y/%m/%d",
+        ]
+        
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str.strip(), fmt)
+            except ValueError:
+                continue
+        
+        return None
     
     def fetch_news_list(self, max_count: int = 10) -> List[NewsItem]:
         """抓取 NHK World 新闻列表"""
@@ -21,61 +42,48 @@ class NHKCrawler(BaseCrawler):
         html = fetch_html(self.base_url, self._get_logger())
         
         if not html:
-            self._get_logger().error("Failed to fetch nhk.or.jp/nhkworld")
+            self._get_logger().error("Failed to fetch nhk.or.jp/nhkworld/en/news/list/")
             return news_list
         
         try:
             soup = BeautifulSoup(html, 'lxml')
-            articles = []
             
-            # NHK World 常用的选择器
-            selectors = [
-                'article a',
-                '.p-rindex__list a',
-                '.p-news-list__item a',
-                'a[href*="/news/"]',
-                'a[href*="/features/"]',
-                '.p-news-title a',
-                '.c-teaser__title a',
-                '.p-block-lead-text a'
-            ]
+            # 使用正确的选择器获取文章列表
+            articles = soup.select('.c-articleList .c-article')
             
-            for selector in selectors:
-                elements = soup.select(selector)
-                if elements:
-                    articles.extend(elements)
-                    if len(articles) >= max_count * 2:
-                        break
+            if not articles:
+                # 尝试备用选择器（主要新闻）
+                articles = soup.select('.c-mainSectionArticle')
             
-            # 去重并处理
+            self._get_logger().info(f"Found {len(articles)} article elements")
+            
             seen_urls = set()
-            for item in articles:
+            for article in articles:
                 if len(news_list) >= max_count:
                     break
                 
                 # 获取标题和链接
-                if hasattr(item, 'get') and item.get('href'):
-                    title = item.get_text(strip=True)
-                    url = item['href']
-                else:
-                    a_tag = item.find('a') if hasattr(item, 'find') else item
-                    if a_tag and hasattr(a_tag, 'get'):
-                        title = a_tag.get_text(strip=True)
-                        url = a_tag.get('href', '')
-                    else:
-                        continue
+                title_tag = article.select_one('.c-article__title') or article.select_one('.c-mainSectionArticle__title')
+                link_tag = article.select_one('a[href]')
+                date_tag = article.select_one('.c-article__date') or article.select_one('.c-mainSectionArticle__date')
                 
-                if not title or not url:
+                if not link_tag:
                     continue
                 
+                href = link_tag.get('href', '')
+                title = title_tag.get_text(strip=True) if title_tag else ''
+                date_str = date_tag.get_text(strip=True) if date_tag else ''
+                
                 # 跳过空标题或太短的标题
-                if len(title) < 5:
+                if not title or len(title) < 5:
                     continue
                 
                 # 处理相对路径
-                if url.startswith('/'):
-                    url = f"https://www3.nhk.or.jp{url}"
-                elif not url.startswith('http'):
+                if href.startswith('/'):
+                    url = f"https://www3.nhk.or.jp{href}"
+                elif href.startswith('http'):
+                    url = href
+                else:
                     continue
                 
                 # 跳过非新闻页面
@@ -87,13 +95,16 @@ class NHKCrawler(BaseCrawler):
                     continue
                 seen_urls.add(url)
                 
+                # 解析发布日期
+                publish_time = self._parse_date(date_str) or datetime.now()
+                
                 # 抓取正文内容
                 content = fetch_article_content(url, self._get_logger())
                 
                 news_item = NewsItem(
                     title=title,
                     url=url,
-                    publish_time=datetime.now(),
+                    publish_time=publish_time,
                     content=content,
                     source="nhk"
                 )
