@@ -100,11 +100,21 @@ class BaseCrawler(ABC):
     def filter_news(
         self, 
         news_list: List[NewsItem], 
-        max_count: int = 10,
+        max_count: int = 0,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
     ) -> List[NewsItem]:
-        """过滤新闻列表"""
+        """过滤新闻列表
+        
+        Args:
+            news_list: 新闻列表
+            max_count: 最大条数，0 表示不限制
+            start_date: 起始日期
+            end_date: 结束日期
+            
+        Returns:
+            过滤后的新闻列表
+        """
         filtered = []
         
         for item in news_list:
@@ -115,7 +125,7 @@ class BaseCrawler(ABC):
             if end_date and item.publish_time and item.publish_time > end_date:
                 continue
             filtered.append(item)
-            if len(filtered) >= max_count:
+            if max_count > 0 and len(filtered) >= max_count:
                 break
         
         return filtered

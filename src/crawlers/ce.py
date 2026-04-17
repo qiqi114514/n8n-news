@@ -16,7 +16,7 @@ class CeCrawler(BaseCrawler):
         # 锁定国际频道
         self.base_url = "http://intl.ce.cn/qqss/index.shtml"
     
-    def fetch_news_list(self, max_count: int = 5) -> List[NewsItem]:
+    def fetch_news_list(self, max_count: int = 0) -> List[NewsItem]:
         """抓取中国经济网新闻列表"""
         news_list = []
         html = fetch_html(self.base_url, self._get_logger())
@@ -29,7 +29,7 @@ class CeCrawler(BaseCrawler):
         
         seen_urls = set()
         for a in all_links:
-            if len(news_list) >= max_count:
+            if max_count > 0 and len(news_list) >= max_count:
                 break
             
             url = a.get('href', '')

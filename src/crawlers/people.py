@@ -20,13 +20,13 @@ class PeopleCrawler(BaseCrawler):
             "http://en.people.cn/business/index.html",  # Business
         ]
     
-    def fetch_news_list(self, max_count: int = 10) -> List[NewsItem]:
+    def fetch_news_list(self, max_count: int = 0) -> List[NewsItem]:
         """抓取人民网新闻列表"""
         news_list = []
         seen_urls = set()
         
         for section_url in self.sections:
-            if len(news_list) >= max_count:
+            if max_count > 0 and len(news_list) >= max_count:
                 break
             
             html = fetch_html(section_url, self._get_logger())
@@ -38,7 +38,7 @@ class PeopleCrawler(BaseCrawler):
                 links = soup.find_all('a', href=True)
                 
                 for link in links:
-                    if len(news_list) >= max_count:
+                    if max_count > 0 and len(news_list) >= max_count:
                         break
                     
                     title = link.get_text(strip=True)

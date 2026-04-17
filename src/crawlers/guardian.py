@@ -16,7 +16,7 @@ class GuardianCrawler(BaseCrawler):
         # 使用世界新闻页面获取最新新闻
         self.world_url = "https://www.theguardian.com/world"
     
-    def fetch_news_list(self, max_count: int = 10) -> List[NewsItem]:
+    def fetch_news_list(self, max_count: int = 0) -> List[NewsItem]:
         """抓取 The Guardian 新闻列表"""
         news_list = []
         
@@ -32,7 +32,7 @@ class GuardianCrawler(BaseCrawler):
             
             # 查找所有文章链接
             for a in soup.find_all('a', href=True):
-                if len(news_list) >= max_count:
+                if max_count > 0 and len(news_list) >= max_count:
                     break
                 
                 href = a.get('href', '')

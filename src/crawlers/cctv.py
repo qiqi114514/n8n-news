@@ -124,7 +124,7 @@ class CCTVcrawler(BaseCrawler):
             seen_urls = set()
             
             for a in all_links:
-                if len(news_list) >= max_count:
+                if max_count > 0 and len(news_list) >= max_count:
                     break
                 
                 url = a['href']

@@ -14,7 +14,7 @@ class APNewsCrawler(BaseCrawler):
         super().__init__(name="apnews")
         self.base_url = "https://apnews.com"
     
-    def fetch_news_list(self, max_count: int = 10) -> List[NewsItem]:
+    def fetch_news_list(self, max_count: int = 0) -> List[NewsItem]:
         """抓取 AP News 新闻列表"""
         news_list = []
         url = "https://apnews.com"
@@ -44,13 +44,13 @@ class APNewsCrawler(BaseCrawler):
                 elements = soup.select(selector)
                 if elements:
                     articles.extend(elements)
-                    if len(articles) >= max_count * 2:
+                    if max_count > 0 and len(articles) >= max_count * 2:
                         break
             
             # 去重并处理
             seen_urls = set()
             for item in articles:
-                if len(news_list) >= max_count:
+                if max_count > 0 and len(news_list) >= max_count:
                     break
                 
                 # 获取标题和链接

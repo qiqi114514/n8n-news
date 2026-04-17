@@ -3,9 +3,9 @@
 from typing import List
 from datetime import datetime
 import re
-from bs4 import BeautifulSoup
+import feedparser
 from crawlers.base import BaseCrawler, NewsItem
-from utils import fetch_html, fetch_article_content
+from utils import fetch_html, fetch_article_content, get_logger
 
 
 class France24Crawler(BaseCrawler):
@@ -20,97 +20,66 @@ class France24Crawler(BaseCrawler):
             "https://www.france24.com/en/rss/world/",
         ]
     
-    def fetch_news_list(self, max_count: int = 10) -> List[NewsItem]:
-        """抓取 France 24 新闻列表"""
+    def fetch_news_list(self, max_count: int = 0) -> List[NewsItem]:
+        """抓取 France 24 新闻列表
+        
+        Args:
+            max_count: 最大抓取条数，0 表示不限制
+            
+        Returns:
+            NewsItem 列表
+        """
         news_list = []
-        html = fetch_html(self.base_url, self._get_logger())
+        logger = self._get_logger()
         
-        if not html:
-            self._get_logger().error("Failed to fetch france24.com")
-            return news_list
-        
-        try:
-            soup = BeautifulSoup(html, 'lxml')
-            articles = []
-            
-            # France 24 常用的选择器
-            selectors = [
-                'article a',
-                '.m-article-list__content a',
-                '.c-tile__content a',
-                'a[href*="/en/"]',
-                'a[href*="/fr/"]',
-                'a[href*="/es/"]',
-                'a[href*="/ar/"]',
-                '.m-listing--live a',
-                '.m-listing--highlights a'
-            ]
-            
-            for selector in selectors:
-                elements = soup.select(selector)
-                if elements:
-                    articles.extend(elements)
-                    if len(articles) >= max_count * 2:
+        for rss_url in self.rss_feeds:
+            try:
+                feed = feedparser.parse(rss_url)
+                
+                for entry in feed.entries:
+                    if max_count > 0 and len(news_list) >= max_count:
                         break
-            
-            # 去重并处理
-            seen_urls = set()
-            for item in articles:
-                if len(news_list) >= max_count:
-                    break
-                
-                # 获取标题和链接
-                if hasattr(item, 'get') and item.get('href'):
-                    title = item.get_text(strip=True)
-                    url = item['href']
-                else:
-                    a_tag = item.find('a') if hasattr(item, 'find') else item
-                    if a_tag and hasattr(a_tag, 'get'):
-                        title = a_tag.get_text(strip=True)
-                        url = a_tag.get('href', '')
-                    else:
+                    
+                    title = entry.get('title', '').strip()
+                    url = entry.get('link', '').strip()
+                    
+                    if not title or not url:
                         continue
+                    
+                    # 跳过非英语页面
+                    if '/fr/' in url or '/es/' in url or '/ar/' in url:
+                        continue
+                    
+                    # 获取发布时间
+                    publish_time = None
+                    if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                        try:
+                            publish_time = datetime(*entry.published_parsed[:6])
+                        except Exception:
+                            publish_time = datetime.now()
+                    else:
+                        publish_time = datetime.now()
+                    
+                    # 抓取正文内容
+                    content = fetch_article_content(url, logger)
+                    
+                    news_item = NewsItem(
+                        title=title,
+                        url=url,
+                        publish_time=publish_time,
+                        content=content,
+                        source="france24"
+                    )
+                    
+                    if self.validate_news_item(news_item):
+                        news_list.append(news_item)
+                        logger.info(f"Found news: {title[:50]}...")
                 
-                if not title or not url:
-                    continue
-                
-                # 跳过空标题或太短的标题
-                if len(title) < 5:
-                    continue
-                
-                # 处理相对路径
-                if url.startswith('/'):
-                    url = f"https://www.france24.com{url}"
-                elif not url.startswith('http'):
-                    continue
-                
-                # 跳过非新闻页面
-                if any(skip in url.lower() for skip in ['/live', '/video', '/podcast', '/watch']):
-                    continue
-                
-                # 去重
-                if url in seen_urls:
-                    continue
-                seen_urls.add(url)
-                
-                # 抓取正文内容
-                content = fetch_article_content(url, self._get_logger())
-                
-                news_item = NewsItem(
-                    title=title,
-                    url=url,
-                    publish_time=datetime.now(),
-                    content=content,
-                    source="france24"
-                )
-                
-                if self.validate_news_item(news_item):
-                    news_list.append(news_item)
-                    self._get_logger().info(f"Found news: {title[:50]}...")
-            
-            self._get_logger().info(f"Successfully fetched {len(news_list)} news from france24.com")
+                if max_count > 0 and len(news_list) >= max_count:
+                    break
+                    
+            except Exception as e:
+                logger.error(f"Error parsing RSS feed {rss_url}: {e}")
         
-        except Exception as e:
-            self._get_logger().error(f"Error parsing france24.com: {e}")
-        
+        logger.info(f"Successfully fetched {len(news_list)} news from france24.com")
         return news_list

@@ -59,7 +59,7 @@ class NHKCrawler(BaseCrawler):
             
             seen_urls = set()
             for article in articles:
-                if len(news_list) >= max_count:
+                if max_count > 0 and len(news_list) >= max_count:
                     break
                 
                 # 获取标题和链接
