@@ -20,7 +20,6 @@ from crawlers.ce import CeCrawler
 from crawlers.bbc import BBCcrawler
 from crawlers.apnews import APNewsCrawler
 from crawlers.guardian import GuardianCrawler
-from crawlers.france24 import France24Crawler
 from crawlers.nhk import NHKCrawler
 
 
@@ -297,7 +296,7 @@ class UnifiedRunner:
            'xinhua': XinhuaCrawler, 'people': PeopleCrawler, 
              'reuters': ReutersCrawler, 'ce': CeCrawler,
             'bbc': BBCcrawler, 'apnews': APNewsCrawler, 'guardian': GuardianCrawler,
-            'france24': France24Crawler, 'nhk': NHKCrawler
+            'nhk': NHKCrawler
         }
         self.extractor = RSSContentExtractor()
 

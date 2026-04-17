@@ -25,7 +25,6 @@ from src.crawlers.ce import CeCrawler
 from src.crawlers.bbc import BBCcrawler
 from src.crawlers.apnews import APNewsCrawler
 from src.crawlers.guardian import GuardianCrawler
-from src.crawlers.france24 import France24Crawler
 from src.crawlers.nhk import NHKCrawler
 from src.config import MAX_NEWS_COUNT
 
@@ -42,7 +41,6 @@ CRAWLER_MAP = {
     'bbc': BBCcrawler,
     'apnews': APNewsCrawler,
     'guardian': GuardianCrawler,
-    'france24': France24Crawler,
     'nhk': NHKCrawler,
 }
 
