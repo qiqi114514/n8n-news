@@ -14,9 +14,9 @@ st.set_page_config(
 # 2. 数据库连接函数（加入异常捕获）
 def get_db_connection():
     try:
-        # 数据库文件现在位于 data/ 目录
+        # 数据库文件现在位于 src/ 目录
         from pathlib import Path
-        db_path = Path(__file__).parent.parent / 'data' / 'news.db'
+        db_path = Path(__file__).parent.parent / 'src' / 'news.db'
         conn = sqlite3.connect(str(db_path), check_same_thread=False)
         return conn
     except Exception as e:

@@ -298,7 +298,7 @@ class UnifiedRunner:
         ]
         self.crawler_classes = {
            'xinhua': XinhuaCrawler, 'people': PeopleCrawler, 
-             'reuters': ReutersCrawler, 'ce': CeCrawler,
+            'reuters': ReutersCrawler, 'ce': CeCrawler,
             'bbc': BBCcrawler, 'apnews': APNewsCrawler, 'guardian': GuardianCrawler,
             'nhk': NHKCrawler, 'dw': DWCrawler
         }
