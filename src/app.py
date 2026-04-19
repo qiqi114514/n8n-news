@@ -64,6 +64,27 @@ def clean_html_content(raw_html):
     
     return processed
 
+
+def init_analysis_table():
+    """Initialize news_analysis table if it doesn't exist"""
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS news_analysis (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    raw_response TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )
+            ''')
+            conn.commit()
+        except Exception as e:
+            st.error(f"初始化分析表失败：{e}")
+        finally:
+            conn.close()
+
+
 # --- 用户认证辅助函数 ---
 def hash_password(password):
     """Hash a password for storing."""
@@ -163,6 +184,9 @@ if 'user_name' not in st.session_state:
     st.session_state.user_name = None
 if 'is_admin' not in st.session_state:
     st.session_state.is_admin = False
+
+# 初始化分析表（如果不存在）
+init_analysis_table()
 
 # --- 主界面 ---
 st.title("📡 AI 智能情报分析门户")
@@ -458,8 +482,19 @@ else:
             st.error(f"❌ 读取分析表失败: {e}")
 
 # 逻辑优化：确保在页面结束前关闭连接
-if conn:
+if 'conn' in locals() and conn:
     conn.close()
 
 if st.button("🔄 刷新页面数据"):
     st.rerun()
+
+# --- 页脚 ---
+st.markdown("---")
+st.markdown(
+    """
+    <div style='text-align: center; color: #888;'>
+        <p>📡 AI 智能情报分析门户 | 数据实时更新中</p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
