@@ -1,24 +1,30 @@
 ```
+# Database files
+*.db
+
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
-# Logs and temp files
-*.log
-*.tmp
-
-# Environment
+.Python
+env/
+venv/
+.venv/
+.ENV
+.ENV.local
 .env
 .env.local
-*.env.*
-
-# Editors
-.vscode/
-.idea/
-
-# Dependencies
-.venv/
-venv/
+.env.*
+.envrc
+.coverage
+coverage/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+*.log
+*.sqlite3
+*.sqlite3-journal
+.DS_Store
+Thumbs.db
 ```
