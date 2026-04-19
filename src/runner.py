@@ -6,8 +6,9 @@ import re
 import logging
 import os
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from typing import Dict, List, Optional, Any
+import time
 
 import feedparser
 from bs4 import BeautifulSoup
@@ -293,7 +294,7 @@ class UnifiedRunner:
             {"name": "澳门新闻局", "url": "https://govinfohub.gcs.gov.mo/api/rss/n/zh-hans"},
             {"name": "xinhua", "url": "https://rsshub.rssforever.com/news/whxw"},
             {"name": "afp", "url": "https://rsshub.rssforever.com/yahoo/news/provider/hk/afp.com.hk"},
-	        {"name": "afp", "url": "https://rsshub.rssforever.com/twitter/user/afp"},
+            {"name": "afp", "url": "https://rsshub.rssforever.com/twitter/user/afp"},
             {"name": "dw", "url": "https://rss.dw.com/atom/rss-en-all"}
         ]
         self.crawler_classes = {
@@ -352,26 +353,53 @@ class UnifiedRunner:
             logger.error(f"Crawler {name} error: {e}", exc_info=True)
             return []
 
-    def start(self, max_count=5):
+    def start(self, max_count=10, timeout_seconds=500):  # 减少默认数量并添加超时
         all_news = []
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        start_time = time.time()
+        remaining_time = timeout_seconds
+
+        with ThreadPoolExecutor(max_workers=3) as executor:  # 减少并发数
             futures = []
+            # 先处理RSS任务
             for r_task in self.rss_tasks:
                 futures.append(executor.submit(self.fetch_rss_task, r_task, max_count))
+            
+            # 然后处理爬虫类任务
             for name, cls in self.crawler_classes.items():
                 futures.append(executor.submit(self.fetch_crawler_class, name, cls, max_count))
             
-            for future in as_completed(futures):
-                res = future.result()
-                if res: all_news.extend(res)
+            for future in as_completed(futures, timeout=remaining_time):
+                elapsed = time.time() - start_time
+                remaining_time = timeout_seconds - elapsed
+                if remaining_time <= 0:
+                    logger.warning("Timeout reached, stopping remaining tasks")
+                    break
+                    
+                try:
+                    res = future.result(timeout=remaining_time)
+                    if res: 
+                        all_news.extend(res)
+                        logger.info(f"Added {len(res)} news items, total: {len(all_news)}")
+                except TimeoutError:
+                    logger.warning("A future took too long, skipping...")
+                    continue
+                except Exception as e:
+                    logger.error(f"Error processing future: {e}")
+                    continue
         
         # 最终输出 JSON
         print(json.dumps(all_news, ensure_ascii=False))
 
 if __name__ == "__main__":
-    count = 5
+    count = 10  # 减少默认数量以加快速度
+    timeout = 500  # 设置超时时间
     if len(sys.argv) > 1:
-        try: count = int(sys.argv[1])
+        try: 
+            count = int(sys.argv[1])
+        except: pass
+    if len(sys.argv) > 2:
+        try:
+            timeout = int(sys.argv[2])
         except: pass
     runner = UnifiedRunner()
-    runner.start(max_count=count)
+    runner.start(max_count=count, timeout_seconds=timeout)

@@ -3,6 +3,7 @@ import sqlite3
 import pandas as pd
 import streamlit.components.v1 as components
 import re
+import hashlib
 
 # 1. 页面基本配置
 st.set_page_config(
@@ -16,7 +17,7 @@ def get_db_connection():
     try:
         # 数据库文件现在位于 src/ 目录
         from pathlib import Path
-        db_path = Path(__file__).parent.parent / 'src' / 'news.db'
+        db_path = Path(__file__).parent / 'news.db'
         conn = sqlite3.connect(str(db_path), check_same_thread=False)
         return conn
     except Exception as e:
@@ -63,7 +64,259 @@ def clean_html_content(raw_html):
     
     return processed
 
-# 3. 侧边栏：实时监控
+# --- 用户认证辅助函数 ---
+def hash_password(password):
+    """Hash a password for storing."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(stored_password, provided_password):
+    """Verify a stored password against one provided by user."""
+    return stored_password == hash_password(provided_password)
+
+def login_user(email, password):
+    """Login user and return user info if successful."""
+    conn = get_db_connection()
+    if conn:
+        try:
+            df = pd.read_sql(
+                "SELECT user_name, user_email FROM subscriptions WHERE user_email = ? LIMIT 1",
+                conn,
+                params=(email,)
+            )
+            conn.close()
+            
+            if not df.empty:
+                # For simplicity, we're treating existence in the subscription table as "user registration"
+                # In a real app, you'd have a separate users table with passwords
+                return {"user_name": df.iloc[0]["user_name"], "user_email": email}
+        except Exception as e:
+            st.error(f"登录验证失败: {e}")
+        finally:
+            conn.close()
+    return None
+
+def register_user(name, email):
+    """Register a user by adding them to the subscription table."""
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            # Check if user already exists
+            cursor.execute("SELECT 1 FROM subscriptions WHERE user_email = ?", (email,))
+            if cursor.fetchone():
+                return False  # User already exists
+            # Add user with a default subscription to demonstrate functionality
+            cursor.execute(
+                "INSERT INTO subscriptions (user_name, user_email, interested_tag) VALUES (?, ?, '世界时事')",
+                (name, email)
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            st.error(f"注册失败: {e}")
+            return False
+        finally:
+            conn.close()
+    return False
+
+# --- 用户认证状态管理 ---
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'user_email' not in st.session_state:
+    st.session_state.user_email = None
+if 'user_name' not in st.session_state:
+    st.session_state.user_name = None
+
+# --- 主界面 ---
+st.title("📡 AI 智能情报分析门户")
+
+# 显示登录状态和登出按钮
+if st.session_state.logged_in:
+    st.sidebar.success(f"欢迎, {st.session_state.user_name}")
+    if st.sidebar.button("登出"):
+        st.session_state.logged_in = False
+        st.session_state.user_email = None
+        st.session_state.user_name = None
+        st.rerun()
+
+# 登录/注册区域
+if not st.session_state.logged_in:
+    with st.expander("🔐 用户登录", expanded=True):
+        login_tab, register_tab = st.tabs(["登录", "注册"])
+        
+        with login_tab:
+            st.subheader("登录")
+            login_email = st.text_input("邮箱", key="login_email")
+            login_password = st.text_input("密码", type="password", key="login_password")
+            
+            if st.button("登录"):
+                user = login_user(login_email, login_password)
+                if user:
+                    st.session_state.logged_in = True
+                    st.session_state.user_email = user["user_email"]
+                    st.session_state.user_name = user["user_name"]
+                    st.success("登录成功！")
+                    st.rerun()
+                else:
+                    st.error("登录失败：邮箱不存在或密码错误")
+        
+        with register_tab:
+            st.subheader("注册")
+            reg_name = st.text_input("姓名", key="reg_name")
+            reg_email = st.text_input("邮箱", key="reg_email")
+            reg_password = st.text_input("密码", type="password", key="reg_password")
+            
+            if st.button("注册"):
+                if reg_name and reg_email and reg_password:
+                    if register_user(reg_name, reg_email):
+                        st.success("注册成功！请前往登录页签登录。")
+                    else:
+                        st.error("注册失败：邮箱可能已被注册")
+                else:
+                    st.error("请填写所有字段")
+
+# --- 订阅管理 ---
+if st.session_state.logged_in:
+    with st.expander("📋 订阅管理", expanded=True):
+        st.subheader(f"订阅新闻领域 - {st.session_state.user_name}")
+        
+        # 获取所有可用的新闻标签
+        conn = get_db_connection()
+        available_tags = []
+        if conn:
+            try:
+                # 获取所有不同的标签
+                tags_df = pd.read_sql("SELECT DISTINCT tag FROM reports", conn)
+                available_tags = [row['tag'] for row in tags_df.to_dict('records')]
+            except:
+                st.warning("暂无可用新闻标签")
+            finally:
+                conn.close()
+        
+        # 如果没有可用标签，提供一些示例
+        if not available_tags:
+            available_tags = ['世界时事', '科技前沿', '财经资讯', '健康生活', '体育赛事']
+        
+        # 显示当前用户的订阅
+        conn = get_db_connection()
+        current_subscriptions = []
+        if conn:
+            try:
+                subs_df = pd.read_sql(
+                    "SELECT DISTINCT interested_tag FROM subscriptions WHERE user_email = ?",
+                    conn,
+                    params=(st.session_state.user_email,)
+                )
+                current_subscriptions = [row['interested_tag'] for row in subs_df.to_dict('records')]
+            except:
+                st.error("获取当前订阅失败")
+            finally:
+                conn.close()
+        
+        # 订阅选项
+        selected_tags = st.multiselect(
+            "选择您感兴趣的新闻领域",
+            options=available_tags,
+            default=current_subscriptions
+        )
+        
+        if st.button("更新订阅"):
+            # 先删除当前用户的所有订阅
+            conn = get_db_connection()
+            if conn:
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM subscriptions WHERE user_email = ?", (st.session_state.user_email,))
+                    
+                    # 添加新的订阅
+                    for tag in selected_tags:
+                        cursor.execute(
+                            "INSERT INTO subscriptions (user_name, user_email, interested_tag) VALUES (?, ?, ?)",
+                            (st.session_state.user_name, st.session_state.user_email, tag)
+                        )
+                    
+                    conn.commit()
+                    st.success("订阅更新成功！")
+                except Exception as e:
+                    st.error(f"更新订阅失败: {e}")
+                finally:
+                    conn.close()
+
+# --- 世界时事日报展示 ---
+st.markdown("---")
+st.header("🌍 世界时事日报")
+
+# 显示世界时事相关的报告
+conn = get_db_connection()
+if conn:
+    try:
+        # 获取最新的世界时事报告
+        world_news_df = pd.read_sql(
+            "SELECT tag, html_content, time, created_at FROM reports WHERE tag LIKE '%世界%' OR tag LIKE '%国际%' OR tag LIKE '%时事%' ORDER BY created_at DESC LIMIT 10",
+            conn
+        )
+        
+        if not world_news_df.empty:
+            # 选择特定日期的报告
+            report_options = [f"{row['time']} - {row['tag']}" for _, row in world_news_df.iterrows()]
+            selected_report = st.selectbox("选择世界时事报告", report_options)
+            
+            # 找到选定的报告
+            selected_idx = report_options.index(selected_report)
+            selected_row = world_news_df.iloc[selected_idx]
+            
+            # 清洗并显示内容
+            cleaned_content = clean_html_content(selected_row['html_content'])
+            st.markdown("---")
+            components.html(cleaned_content, height=800, scrolling=True)
+        else:
+            st.info("暂无世界时事相关报告。")
+    except Exception as e:
+        st.error(f"读取世界时事报告失败: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+# 仅对已登录用户显示其他报告
+if st.session_state.logged_in:
+    st.markdown("---")
+    st.header("📰 其他新闻报告")
+    
+    conn = get_db_connection()
+    if conn:
+        try:
+            # 获取所有其他类型的报告
+            other_reports_df = pd.read_sql(
+                "SELECT DISTINCT tag, MAX(created_at) as latest_created_at FROM reports WHERE tag NOT LIKE '%世界%' AND tag NOT LIKE '%国际%' AND tag NOT LIKE '%时事%' GROUP BY tag ORDER BY latest_created_at DESC",
+                conn
+            )
+            
+            if not other_reports_df.empty:
+                # 显示可选的标签
+                other_tags = [row['tag'] for _, row in other_reports_df.iterrows()]
+                selected_other_tag = st.selectbox("选择其他新闻领域", other_tags)
+                
+                # 获取选定标签的最新报告
+                latest_report_df = pd.read_sql(
+                    "SELECT html_content, time, created_at FROM reports WHERE tag = ? ORDER BY created_at DESC LIMIT 1",
+                    conn,
+                    params=(selected_other_tag,)
+                )
+                
+                if not latest_report_df.empty:
+                    latest_report = latest_report_df.iloc[0]
+                    cleaned_content = clean_html_content(latest_report['html_content'])
+                    st.markdown("---")
+                    components.html(cleaned_content, height=800, scrolling=True)
+            else:
+                st.info("暂无其他新闻报告。")
+        except Exception as e:
+            st.error(f"读取其他报告失败: {e}")
+        finally:
+            if conn:
+                conn.close()
+
+# --- 原有的实时监控和数据展示 ---
 st.sidebar.title("📊 系统实时监控")
 conn = get_db_connection()
 
@@ -82,10 +335,7 @@ if conn:
     except Exception as e:
         st.sidebar.error(f"监控数据读取失败: {e}")
 
-# 4. 主界面
-st.title("📡 AI 智能情报分析门户")
 st.markdown("---")
-
 tab1, tab2 = st.tabs(["📅 深度日报预览", "📦 原始数据流水"])
 
 with tab1:

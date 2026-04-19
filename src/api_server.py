@@ -16,7 +16,8 @@ SCRIPT_MAP = {
     "check_exists": "check_exists.py",
     "preprocess": "preprocess.py",
     "query_pending": "query_pending.py",
-    "save_analysis": "save_analysis.py"
+    "save_analysis": "save_analysis.py",
+    "save_report" : "save_report.py"
 }
 
 class APIHandler(BaseHTTPRequestHandler):
@@ -49,7 +50,7 @@ class APIHandler(BaseHTTPRequestHandler):
             )
             
             # 将 n8n 传来的 post_data 注入脚本 stdin，并获取结果
-            stdout_data, stderr_data = proc.communicate(input=post_data, timeout=60)
+            stdout_data, stderr_data = proc.communicate(input=post_data, timeout=200)
             
             if proc.returncode == 0:
                 # 解析脚本输出并返回给 n8n
@@ -60,10 +61,16 @@ class APIHandler(BaseHTTPRequestHandler):
                     result = {"output": stdout_data.decode('utf-8')}
                 self._send_json(result, 200)
             else:
-                self._send_json({"error": stderr_data.decode()}, 500)
+                # Log the actual error for debugging
+                error_message = stderr_data.decode('utf-8')
+                logging.error(f"Script failed with return code {proc.returncode}: {error_message}")
+                self._send_json({"error": error_message}, 500)
                 
+        except subprocess.TimeoutExpired:
+            logging.error("⏰ Script execution timed out")
+            self._send_json({"error": "Script execution timed out"}, 504)
         except Exception as e:
-            logging.error(f"🔥 Error: {e}")
+            logging.error(f"🔥 Server Error: {e}")
             self._send_json({"error": str(e)}, 500)
 
 if __name__ == '__main__':
@@ -74,10 +81,4 @@ if __name__ == '__main__':
     httpd = HTTPServer(server_address, APIHandler)
     
     print(f'Starting server on port {port}...')
-    logging.info(f'Server running on port {port}')
-    
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print('\nShutting down server...')
-        httpd.server_close()
+    httpd.serve_forever()
