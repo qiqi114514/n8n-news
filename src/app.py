@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit.components.v1 as components
 import re
 import hashlib
+from pathlib import Path
 
 # 1. 页面基本配置
 st.set_page_config(
@@ -16,7 +17,6 @@ st.set_page_config(
 def get_db_connection():
     try:
         # 数据库文件现在位于 src/ 目录
-        from pathlib import Path
         db_path = Path(__file__).parent / 'news.db'
         conn = sqlite3.connect(str(db_path), check_same_thread=False)
         return conn
@@ -39,7 +39,7 @@ def clean_html_content(raw_html):
             # 尝试通过 JSON 解码处理转义符
             data = json.loads(processed)
             if isinstance(data, dict):
-                # 优先寻找可能存入 HTML 的字段
+                # 优先寻找可能存入 HTML 的 fields
                 processed = data.get('raw_response', data.get('full_markdown', str(data)))
             else:
                 processed = data
@@ -78,6 +78,26 @@ def login_user(email, password):
     conn = get_db_connection()
     if conn:
         try:
+            # 检查是否是管理员账户
+            df = pd.read_sql(
+                "SELECT username, email FROM admin_users WHERE email = ?",
+                conn,
+                params=(email,)
+            )
+            
+            if not df.empty:
+                # 验证管理员密码
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT password_hash FROM admin_users WHERE email = ?",
+                    (email,)
+                )
+                result = cursor.fetchone()
+                if result and verify_password(result[0], password):
+                    conn.close()
+                    return {"user_name": df.iloc[0]["username"], "user_email": email, "is_admin": True}
+            
+            # 检查普通用户
             df = pd.read_sql(
                 "SELECT user_name, user_email FROM subscriptions WHERE user_email = ? LIMIT 1",
                 conn,
@@ -88,7 +108,7 @@ def login_user(email, password):
             if not df.empty:
                 # For simplicity, we're treating existence in the subscription table as "user registration"
                 # In a real app, you'd have a separate users table with passwords
-                return {"user_name": df.iloc[0]["user_name"], "user_email": email}
+                return {"user_name": df.iloc[0]["user_name"], "user_email": email, "is_admin": False}
         except Exception as e:
             st.error(f"登录验证失败: {e}")
         finally:
@@ -119,6 +139,21 @@ def register_user(name, email):
             conn.close()
     return False
 
+def is_admin(user_email):
+    """Check if the user is admin"""
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM admin_users WHERE email = ?", (user_email,))
+            result = cursor.fetchone()
+            return result is not None
+        except:
+            return False
+        finally:
+            conn.close()
+    return False
+
 # --- 用户认证状态管理 ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
@@ -126,6 +161,8 @@ if 'user_email' not in st.session_state:
     st.session_state.user_email = None
 if 'user_name' not in st.session_state:
     st.session_state.user_name = None
+if 'is_admin' not in st.session_state:
+    st.session_state.is_admin = False
 
 # --- 主界面 ---
 st.title("📡 AI 智能情报分析门户")
@@ -137,6 +174,7 @@ if st.session_state.logged_in:
         st.session_state.logged_in = False
         st.session_state.user_email = None
         st.session_state.user_name = None
+        st.session_state.is_admin = False
         st.rerun()
 
 # 登录/注册区域
@@ -155,6 +193,7 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.user_email = user["user_email"]
                     st.session_state.user_name = user["user_name"]
+                    st.session_state.is_admin = user["is_admin"]
                     st.success("登录成功！")
                     st.rerun()
                 else:
@@ -195,7 +234,7 @@ if st.session_state.logged_in:
         
         # 如果没有可用标签，提供一些示例
         if not available_tags:
-            available_tags = ['世界时事', '科技前沿', '财经资讯', '健康生活', '体育赛事']
+            available_tags = ['世界时事', '科技前沿', '财经资讯', '健康生活', '体育赛事', '澳门', '军事']
         
         # 显示当前用户的订阅
         conn = get_db_connection()
@@ -213,12 +252,20 @@ if st.session_state.logged_in:
             finally:
                 conn.close()
         
-        # 订阅选项
-        selected_tags = st.multiselect(
-            "选择您感兴趣的新闻领域",
-            options=available_tags,
-            default=current_subscriptions
-        )
+        # 管理员用户默认订阅所有领域
+        if st.session_state.is_admin:
+            selected_tags = st.multiselect(
+                "选择您感兴趣的新闻领域",
+                options=available_tags,
+                default=available_tags  # 管理员默认选择全部
+            )
+        else:
+            # 普通用户显示当前订阅
+            selected_tags = st.multiselect(
+                "选择您感兴趣的新闻领域",
+                options=available_tags,
+                default=current_subscriptions
+            )
         
         if st.button("更新订阅"):
             # 先删除当前用户的所有订阅
@@ -316,30 +363,76 @@ if st.session_state.logged_in:
             if conn:
                 conn.close()
 
-# --- 原有的实时监控和数据展示 ---
-st.sidebar.title("📊 系统实时监控")
-conn = get_db_connection()
+# --- 管理员才能看到的系统实时监控 ---
+if st.session_state.is_admin:
+    st.sidebar.title("📊 系统实时监控")
+    conn = get_db_connection()
 
-if conn:
-    try:
-        # 检查表是否存在
-        tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
-        if 'news_raw' in tables.values:
-            status_df = pd.read_sql("SELECT status as '状态', COUNT(*) as '数量' FROM news_raw GROUP BY status", conn)
-            st.sidebar.table(status_df)
-            
-            source_df = pd.read_sql("SELECT source as '来源', COUNT(*) as '条数' FROM news_raw GROUP BY source", conn)
-            st.sidebar.bar_chart(source_df.set_index('来源'))
-        else:
-            st.sidebar.warning("等待数据入库...")
-    except Exception as e:
-        st.sidebar.error(f"监控数据读取失败: {e}")
+    if conn:
+        try:
+            # 检查表是否存在
+            tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
+            if 'news_raw' in tables.values:
+                # 使用横向表格显示状态统计
+                status_df = pd.read_sql("SELECT status as '状态', COUNT(*) as '数量' FROM news_raw GROUP BY status", conn)
+                st.sidebar.subheader("新闻状态统计")
+                st.sidebar.table(status_df)
+                
+                source_df = pd.read_sql("SELECT source as '来源', COUNT(*) as '条数' FROM news_raw GROUP BY source", conn)
+                st.sidebar.subheader("新闻来源统计")
+                st.sidebar.bar_chart(source_df.set_index('来源'))
+            else:
+                st.sidebar.warning("等待数据入库...")
+        except Exception as e:
+            st.sidebar.error(f"监控数据读取失败: {e}")
 
-st.markdown("---")
-tab1, tab2 = st.tabs(["📅 深度日报预览", "📦 原始数据流水"])
+# --- 管理员才能看到的原始数据流水 ---
+if st.session_state.is_admin:
+    st.markdown("---")
+    tab1, tab2 = st.tabs(["📅 深度日报预览", "📦 原始数据流水"])
 
-with tab1:
-    st.header("最新行业深度分析")
+    with tab1:
+        st.header("最新行业深度分析")
+        if conn:
+            try:
+                # 读取分析表
+                analysis_data = pd.read_sql(
+                    "SELECT created_at, raw_response FROM news_analysis ORDER BY created_at DESC LIMIT 15", 
+                    conn
+                )
+                
+                if not analysis_data.empty:
+                    selected_date = st.selectbox("📅 选择报告期数", analysis_data['created_at'])
+                    raw_content = analysis_data[analysis_data['created_at'] == selected_date]['raw_response'].values[0]
+                    
+                    # 执行清洗逻辑
+                    final_html = clean_html_content(raw_content)
+                    
+                    # 渲染
+                    st.markdown("---")
+                    # 增加高度以适应长日报
+                    components.html(final_html, height=1000, scrolling=True)
+                else:
+                    st.info("💡 暂无分析记录，请检查 n8n 的『早晚报分析』工作流是否正常存库。")
+            except Exception as e:
+                st.error(f"❌ 读取分析表失败: {e}")
+
+    with tab2:
+        st.header("实时入库新闻 (Top 50)")
+        if conn:
+            try:
+                raw_news_df = pd.read_sql(
+                    "SELECT title as '标题', source as '来源', status as '状态', created_at as '入库时间' FROM news_raw ORDER BY created_at DESC LIMIT 50",
+                    conn
+                )
+                st.dataframe(raw_news_df, use_container_width=True)
+            except Exception as e:
+                st.error(f"❌ 读取原始表失败: {e}")
+else:
+    # 非管理员用户仍然可以看到深度日报预览
+    st.markdown("---")
+    st.header("📅 深度日报预览")
+    conn = get_db_connection()
     if conn:
         try:
             # 读取分析表
@@ -363,18 +456,6 @@ with tab1:
                 st.info("💡 暂无分析记录，请检查 n8n 的『早晚报分析』工作流是否正常存库。")
         except Exception as e:
             st.error(f"❌ 读取分析表失败: {e}")
-
-with tab2:
-    st.header("实时入库新闻 (Top 50)")
-    if conn:
-        try:
-            raw_news_df = pd.read_sql(
-                "SELECT title as '标题', source as '来源', status as '状态', created_at as '入库时间' FROM news_raw ORDER BY created_at DESC LIMIT 50",
-                conn
-            )
-            st.dataframe(raw_news_df, use_container_width=True)
-        except Exception as e:
-            st.error(f"❌ 读取原始表失败: {e}")
 
 # 逻辑优化：确保在页面结束前关闭连接
 if conn:
