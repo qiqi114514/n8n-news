@@ -409,89 +409,77 @@ if st.session_state.logged_in:
 
 # --- 世界时事日报展示 ---
 st.markdown("---")
-st.header("🌍 世界时事日报")
+st.header("🌍 分类新闻速递")
 
-# 显示世界时事相关的报告
-conn = get_db_connection()
-if conn:
-    try:
-        # 获取最新的世界时事报告
-        world_news_df = pd.read_sql(
-            "SELECT tag, html_content, time, created_at FROM reports WHERE tag LIKE '%世界%' OR tag LIKE '%国际%' OR tag LIKE '%时事%' ORDER BY created_at DESC LIMIT 10",
-            conn
-        )
-        
-        if not world_news_df.empty:
-            # 选择特定日期的报告
-            report_options = [f"{row['time']} - {row['tag']}" for _, row in world_news_df.iterrows()]
-            selected_report = st.selectbox("选择世界时事报告", report_options)
-            
-            # 找到选定的报告
-            selected_idx = report_options.index(selected_report)
-            selected_row = world_news_df.iloc[selected_idx]
-            
-            # 清洗并显示内容
-            cleaned_content = clean_html_content(selected_row['html_content'])
-            st.markdown("---")
-            components.html(cleaned_content, height=800, scrolling=True)
-        else:
-            st.info("暂无世界时事相关报告。")
-    except Exception as e:
-        st.error(f"读取世界时事报告失败: {e}")
-    finally:
-        if conn:
-            conn.close()
+# 定义新闻分类
+categories = {
+    '世界时事': 'world',
+    '科技前沿': 'tech',
+    '财经资讯': 'finance',
+    '军事': 'military',
+    '澳门': 'macao'
+}
 
-# 仅对已登录用户显示其他报告
-if st.session_state.logged_in:
-    st.markdown("---")
-    st.header("📰 个性化新闻报告")
-    
-    # 获取用户订阅的标签
-    user_subscriptions = get_user_subscriptions(st.session_state.user_email)
-    
-    if user_subscriptions:
+# 创建分类选项卡
+tabs = st.tabs(list(categories.keys()))
+
+for idx, (category_name, category_key) in enumerate(categories.items()):
+    with tabs[idx]:
+        # 获取该分类下的所有日报日期
         conn = get_db_connection()
         if conn:
             try:
-                # 构建SQL查询，只显示用户订阅的新闻标签
-                placeholders = ','.join(['?' for _ in user_subscriptions])
-                query = f"""
-                    SELECT DISTINCT tag, MAX(created_at) as latest_created_at 
-                    FROM reports 
-                    WHERE tag IN ({placeholders}) 
-                    GROUP BY tag 
-                    ORDER BY latest_created_at DESC
-                """
+                # 根据分类获取所有不同的日期
+                if category_name == '科技前沿':
+                    # 科技前沿模块的检索逻辑是"科技"
+                    query = "SELECT DISTINCT time FROM reports WHERE tag LIKE '%科技%' ORDER BY time DESC"
+                elif category_name == '财经资讯':
+                    # 财经资讯的检索逻辑是"经济"
+                    query = "SELECT DISTINCT time FROM reports WHERE tag LIKE '%经济%' ORDER BY time DESC"
+                else:
+                    # 其他分类使用原来的逻辑
+                    query = f"SELECT DISTINCT time FROM reports WHERE tag LIKE '%{category_name}%' ORDER BY time DESC"
                 
-                other_reports_df = pd.read_sql(query, conn, params=user_subscriptions)
+                dates_df = pd.read_sql(query, conn)
                 
-                if not other_reports_df.empty:
-                    # 显示可选的标签
-                    other_tags = [row['tag'] for _, row in other_reports_df.iterrows()]
-                    selected_other_tag = st.selectbox("选择新闻领域", other_tags)
+                if not dates_df.empty:
+                    # 提取日期列表
+                    available_dates = [row['time'] for row in dates_df.to_dict('records')]
                     
-                    # 获取选定标签的最新报告
-                    latest_report_df = pd.read_sql(
-                        "SELECT html_content, time, created_at FROM reports WHERE tag = ? ORDER BY created_at DESC LIMIT 1",
+                    # 日期选择器
+                    selected_date = st.selectbox(f"📅 选择{category_name}报告日期", available_dates, key=f"{category_key}_date")
+                    
+                    # 根据分类确定查询条件
+                    if category_name == '科技前沿':
+                        tag_condition = '%科技%'
+                    elif category_name == '财经资讯':
+                        tag_condition = '%经济%'
+                    else:
+                        tag_condition = f'%{category_name}%'
+                    
+                    # 获取选定日期的报告
+                    report_df = pd.read_sql(
+                        f"SELECT tag, html_content, time FROM reports WHERE tag LIKE ? AND time = ? ORDER BY time DESC LIMIT 1",
                         conn,
-                        params=(selected_other_tag,)
+                        params=(tag_condition, selected_date)
                     )
                     
-                    if not latest_report_df.empty:
-                        latest_report = latest_report_df.iloc[0]
-                        cleaned_content = clean_html_content(latest_report['html_content'])
+                    if not report_df.empty:
+                        report_row = report_df.iloc[0]
+                        
+                        # 清洗并显示内容
+                        cleaned_content = clean_html_content(report_row['html_content'])
                         st.markdown("---")
                         components.html(cleaned_content, height=800, scrolling=True)
+                    else:
+                        st.info(f"暂无{category_name}相关报告。")
                 else:
-                    st.info("暂无订阅领域的新闻报告。")
+                    st.info(f"暂无{category_name}相关报告。")
             except Exception as e:
-                st.error(f"读取个性化报告失败: {e}")
+                st.error(f"读取{category_name}报告失败: {e}")
             finally:
                 if conn:
                     conn.close()
-    else:
-        st.info("您还没有订阅任何新闻领域，请前往订阅管理设置感兴趣的主题。")
 
 # --- 管理员才能看到的系统实时监控 ---
 if st.session_state.is_admin:
@@ -519,33 +507,7 @@ if st.session_state.is_admin:
 # --- 管理员才能看到的原始数据流水 ---
 if st.session_state.is_admin:
     st.markdown("---")
-    tab1, tab2 = st.tabs(["📅 深度日报预览", "📦 原始数据流水"])
-
-    with tab1:
-        st.header("最新行业深度分析")
-        if conn:
-            try:
-                # 读取分析表
-                analysis_data = pd.read_sql(
-                    "SELECT created_at, raw_response FROM news_analysis ORDER BY created_at DESC LIMIT 15", 
-                    conn
-                )
-                
-                if not analysis_data.empty:
-                    selected_date = st.selectbox("📅 选择报告期数", analysis_data['created_at'])
-                    raw_content = analysis_data[analysis_data['created_at'] == selected_date]['raw_response'].values[0]
-                    
-                    # 执行清洗逻辑
-                    final_html = clean_html_content(raw_content)
-                    
-                    # 渲染
-                    st.markdown("---")
-                    # 增加高度以适应长日报
-                    components.html(final_html, height=1000, scrolling=True)
-                else:
-                    st.info("💡 暂无分析记录，请检查 n8n 的『早晚报分析』工作流是否正常存库。")
-            except Exception as e:
-                st.error(f"❌ 读取分析表失败: {e}")
+    tab2 = st.tabs(["📦 原始数据流水"])[0]
 
     with tab2:
         st.header("实时入库新闻 (Top 50)")
@@ -558,34 +520,6 @@ if st.session_state.is_admin:
                 st.dataframe(raw_news_df, use_container_width=True)
             except Exception as e:
                 st.error(f"❌ 读取原始表失败: {e}")
-else:
-    # 非管理员用户仍然可以看到深度日报预览
-    st.markdown("---")
-    st.header("📅 深度日报预览")
-    conn = get_db_connection()
-    if conn:
-        try:
-            # 读取分析表
-            analysis_data = pd.read_sql(
-                "SELECT created_at, raw_response FROM news_analysis ORDER BY created_at DESC LIMIT 15", 
-                conn
-            )
-            
-            if not analysis_data.empty:
-                selected_date = st.selectbox("📅 选择报告期数", analysis_data['created_at'])
-                raw_content = analysis_data[analysis_data['created_at'] == selected_date]['raw_response'].values[0]
-                
-                # 执行清洗逻辑
-                final_html = clean_html_content(raw_content)
-                
-                # 渲染
-                st.markdown("---")
-                # 增加高度以适应长日报
-                components.html(final_html, height=1000, scrolling=True)
-            else:
-                st.info("💡 暂无分析记录，请检查 n8n 的『早晚报分析』工作流是否正常存库。")
-        except Exception as e:
-            st.error(f"❌ 读取分析表失败: {e}")
 
 # 逻辑优化：确保在页面结束前关闭连接
 if 'conn' in locals() and conn:
