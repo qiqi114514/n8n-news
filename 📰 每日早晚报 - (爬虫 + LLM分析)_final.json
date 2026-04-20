@@ -1,0 +1,1586 @@
+{
+  "name": "📰 每日早晚报 - (爬虫 + LLM分析)_final",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "c939875d-d96e-4cb0-a0a2-e9096fde496f",
+      "name": "Schedule Trigger - 启动爬虫",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -128,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/run_crawler",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": "={{ false }}",
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 1200000
+        }
+      },
+      "id": "f8d83669-5fc8-4eff-b916-bd4993d37ab3",
+      "name": "HTTP Request - 调用爬虫",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        64,
+        -160
+      ],
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/save_raw",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "={{ $json.title }}"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.url }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "=importance_score",
+              "value": "={{ $json.importance_score }}"
+            },
+            {
+              "name": "tag",
+              "value": "={{ $json.tag }}"
+            },
+            {
+              "name": "source",
+              "value": "={{ $json.source }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 300
+            }
+          }
+        }
+      },
+      "id": "2a043f24-f23b-4202-97cb-2d5bebe64095",
+      "name": "HTTP Request - 保存数据库",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1872,
+        -160
+      ],
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 8,20 * * *"
+            }
+          ]
+        }
+      },
+      "id": "35ab986e-eb65-49d8-b3f6-45488fe2b0e7",
+      "name": "Schedule Trigger - 早晚报分析",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -272,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/query_pending",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {}
+      },
+      "id": "df4503ff-556f-48d7-852b-ec1dcfe2b499",
+      "name": "HTTP Request - 查询待分析",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 获取爬虫返回的所有数据\nconst items = $input.all();\nconst uniqueItems = [];\nconst seenUrls = new Set();\n\nfor (const item of items) {\n    const url = item.json.url;\n    if (url && !seenUrls.has(url)) {\n        seenUrls.add(url);\n        uniqueItems.push(item);\n    }\n}\n\nreturn uniqueItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        -160
+      ],
+      "id": "43e2ceca-b770-4886-8462-dc737187ea26",
+      "name": "Code in JavaScript - 数据清洗"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n    // 1. 首先检查是否有 HTTP 错误（由 Continue on Fail 产生）\n    // 或者检查 LLM 是否因为安全策略返回了空结果\n    if ($json.error || !$json.choices || $json.choices.length === 0) {\n        throw new Error(\"API_ERROR_OR_SENSITIVE_CONTENT\");\n    }\n\n    const rawContent = $json.choices[0].message.content;\n    \n    // 2. 去除 Markdown 标记\n    const cleanJson = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();\n    const parsedData = JSON.parse(cleanJson);\n\n    return {\n        json: {\n            title: parsedData.title || \"无标题\",\n            // 回退到 Loop 节点的原始 URL，确保链路完整\n            url: parsedData.url || $node[\"Loop Over Items\"].json.url, \n            tag: parsedData.tag || \"未分类\",\n            importance_score: parsedData.importance_score || 5,\n            content: parsedData.content || \"摘要生成失败\",\n            source: parsedData.source || \"未知来源\",\n            status: \"success\" // 正常分析成功\n        }\n    };\n\n} catch (error) {\n    // 3. 捕获所有异常：包含 API 报错、敏感词拦截、JSON 解析失败\n    return {\n        json: {\n            status: \"skip\", // 标记为跳过\n            error_type: error.message,\n            // 尽量保留原始信息以便排查\n            title: $node[\"Loop Over Items\"].json.title || \"分析失败条目\",\n            url: $node[\"Loop Over Items\"].json.url,\n            content: \"该条内容因政策或技术原因无法分析\"\n        }\n    };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -160
+      ],
+      "id": "7b5e1ee2-a113-41b5-93b4-9373828e5b36",
+      "name": "Code in JavaScript - 标签拆解"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7a48aeee-c610-4c26-9ed2-0f2af3b84a4f",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        992,
+        -160
+      ],
+      "id": "16c180b6-c46d-4074-8d04-ddba79c851f0",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/check_exists",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.data }}",
+        "options": {
+          "timeout": 1200000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        832,
+        -160
+      ],
+      "id": "d644043e-522d-46e7-abe3-3bfa59e23c66",
+      "name": "HTTP Request - 数据查重",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -160
+      ],
+      "id": "dcde75ff-b5ca-4a80-ba15-51ee4f017aa6",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "fromEmail": "richchan20071231@163.com",
+        "toEmail": "richchan20071231@163.com",
+        "subject": "={{ \"AI 深度日报 - \" + $now.format('yyyy-MM-dd ') }}",
+        "html": "={{ $('HTTP Request - LLM时事板块日报').item.json.choices[0].message.content }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1456,
+        80
+      ],
+      "id": "6c289200-4b98-4f0e-8e7a-0f0e73499e22",
+      "name": "Send an Email",
+      "webhookId": "9c9a0881-c3f9-4f70-a25c-74cf938ada19",
+      "credentials": {
+        "smtp": {
+          "id": "dti91YcvJLFan6UI",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 遍历每一个 Item 进行处理\nfor (const item of $input.all()) {\n  if (item.json.content) {\n    // 1. 去除换行符 \\n 和回车符 \\r\n    // 2. 将多个连续空格替换为一个空格\n    // 3. 去除首尾空白字符\n    item.json.content = item.json.content\n      .replace(/[\\r\\n]+/g, ' ')  // 将所有换行替换为单个空格\n      .replace(/\\s+/g, ' ')      // 将多个空格/制表符替换为单空格\n      .trim();                   // 去除首尾空格\n  }\n  \n  if (item.json.title) {\n    item.json.title = item.json.title\n      .replace(/[\\r\\n]+/g, '')   // 标题通常不需要换行，直接去掉\n      .trim();\n  }\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        -160
+      ],
+      "id": "c420de42-346d-4583-abfc-fed896f64668",
+      "name": "Code in JavaScript - 删除符号干扰"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer d352b8ea676647ed8268e4dd7f8e8736.eFYV3HQh703BEq3h"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  \"model\": \"GLM-4.5-Air\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": `你是一个专业的数据清洗与事实提取机器人。你的唯一任务是将新闻文本转化为客观、结构化的纯事实摘要。\n\n### 核心工作原则：\n1. **去情绪化提取**：严格禁止提取任何立场描述、评论性词汇或政治敏感修饰语。仅保留：谁、何时、何地、做了什么、具体数字。\n2. **事实脱敏**：如果新闻涉及敏感争议，请仅以“某机构”、“相关各方”等中性词描述，或仅提取其中的经济/科技数据。\n3. **极致压缩**：字数严格控制在 80-100 字。只保留骨干信息。\n\n### 评分标准 (importance_score)：\n- **9-10 (全球重大)**: 全球性灾难、战争爆发、颠覆性技术底层突破。\n- **7-8 (行业核心)**: 重点政策发布、行业巨头（如华为、腾讯）核心财报或技术突破、关键宏动数据。\n- **5-6 (普通动态)**: 地区性社会动态、常规行业升级、普通商业交易。\n- **1-4 (低价值)**: 品牌公关、日常通知、软文。\n\n### 输出格式（严格禁止修改 title/url）：\n{\n  \"title\": \"原样返回输入的新闻标题\",\n  \"url\": \"原样返回输入的原文网址\",\n  \"tag\": \"仅限：z\",\n  \"importance_score\": 评分数字,\n  \"content\": \"核心事实摘要\",\n  \"source\": \"所属信息源\"\n}`\n    },\n    {\n      \"role\": \"user\",\n      \"content\": `【待处理数据】\\n来源：${$json.source}\\n标题：${$json.title}\\n内容：${$json.content}`\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}) \n}}",
+        "options": {
+          "timeout": 1200000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1456,
+        -160
+      ],
+      "id": "e25fc09d-a8b2-4fe2-84f9-bf934947e33f",
+      "name": "HTTP Request - LLM聚类筛选",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1232,
+        -176
+      ],
+      "id": "77dcc222-1a87-48ac-9df0-2df9b65ad9da",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 提取 HTTP 返回的字符串内容\nconst rawOutput = $json.output;\n\n// 找到 JSON 数组开始的位置（跳过前面的 \"Connecting to database...\" 等文字）\nconst jsonStart = rawOutput.indexOf('[');\nconst jsonEnd = rawOutput.lastIndexOf(']') + 1;\n\nif (jsonStart === -1) return [];\n\n// 解析真正的 JSON 数据\nconst newsList = JSON.parse(rawOutput.substring(jsonStart, jsonEnd));\n\n// 将数组平铺输出，让 n8n 后续节点可以逐条处理\nreturn newsList.map(item => ({ json: item }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        80
+      ],
+      "id": "efe02c48-1a75-4049-9de7-91ec7c62d6ff",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/query_pending",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {}
+      },
+      "id": "397b7d05-e0c7-4e3c-b4b6-c39417644158",
+      "name": "HTTP Request - 查询待分析1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 提取 HTTP 返回的字符串内容\nconst rawOutput = $json.output;\n\n// 找到 JSON 数组开始的位置（跳过前面的 \"Connecting to database...\" 等文字）\nconst jsonStart = rawOutput.indexOf('[');\nconst jsonEnd = rawOutput.lastIndexOf(']') + 1;\n\nif (jsonStart === -1) return [];\n\n// 解析真正的 JSON 数据\nconst newsList = JSON.parse(rawOutput.substring(jsonStart, jsonEnd));\n\n// 将数组平铺输出，让 n8n 后续节点可以逐条处理\nreturn newsList.map(item => ({ json: item }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        336
+      ],
+      "id": "2b8eb4c7-8ec4-4757-9d9a-f034dddbbd41",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/query_pending",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {}
+      },
+      "id": "f27a1049-a1b9-4cb4-86ee-aa519dacd58e",
+      "name": "HTTP Request - 查询待分析2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 提取 HTTP 返回的字符串内容\nconst rawOutput = $json.output;\n\n// 找到 JSON 数组开始的位置（跳过前面的 \"Connecting to database...\" 等文字）\nconst jsonStart = rawOutput.indexOf('[');\nconst jsonEnd = rawOutput.lastIndexOf(']') + 1;\n\nif (jsonStart === -1) return [];\n\n// 解析真正的 JSON 数据\nconst newsList = JSON.parse(rawOutput.substring(jsonStart, jsonEnd));\n\n// 将数组平铺输出，让 n8n 后续节点可以逐条处理\nreturn newsList.map(item => ({ json: item }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        608
+      ],
+      "id": "30531cbb-93d7-4075-85d7-5242022b06ae",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/query_pending",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {}
+      },
+      "id": "6e3f71af-f90b-4146-9109-cf72e3283ca3",
+      "name": "HTTP Request - 查询待分析3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 提取 HTTP 返回的字符串内容\nconst rawOutput = $json.output;\n\n// 找到 JSON 数组开始的位置（跳过前面的 \"Connecting to database...\" 等文字）\nconst jsonStart = rawOutput.indexOf('[');\nconst jsonEnd = rawOutput.lastIndexOf(']') + 1;\n\nif (jsonStart === -1) return [];\n\n// 解析真正的 JSON 数据\nconst newsList = JSON.parse(rawOutput.substring(jsonStart, jsonEnd));\n\n// 将数组平铺输出，让 n8n 后续节点可以逐条处理\nreturn newsList.map(item => ({ json: item }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        848
+      ],
+      "id": "687e959d-5569-4c5d-9d88-95311253930b",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/query_pending",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {}
+      },
+      "id": "6bc75637-fb67-4c23-b069-ccd52036a07f",
+      "name": "HTTP Request - 查询待分析4",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16,
+        1136
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 提取 HTTP 返回的字符串内容\nconst rawOutput = $json.output;\n\n// 找到 JSON 数组开始的位置（跳过前面的 \"Connecting to database...\" 等文字）\nconst jsonStart = rawOutput.indexOf('[');\nconst jsonEnd = rawOutput.lastIndexOf(']') + 1;\n\nif (jsonStart === -1) return [];\n\n// 解析真正的 JSON 数据\nconst newsList = JSON.parse(rawOutput.substring(jsonStart, jsonEnd));\n\n// 将数组平铺输出，让 n8n 后续节点可以逐条处理\nreturn newsList.map(item => ({ json: item }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        1136
+      ],
+      "id": "1f081edf-df5f-4400-bbdd-2e064ba78a9d",
+      "name": "Code in JavaScript5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f17a2342-e7ed-4cc0-92a2-b4bd63be0b86",
+              "leftValue": "={{ $json.source }}",
+              "rightValue": "澳门新闻局",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        400,
+        80
+      ],
+      "id": "ff2c3c64-1ad4-49a0-8628-ec312d0f00c7",
+      "name": "Filter - 澳门新闻"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f17a2342-e7ed-4cc0-92a2-b4bd63be0b86",
+              "leftValue": "={{ $json.importance_score }}",
+              "rightValue": 7,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "d4489fdb-3729-4806-b981-4f78ba648ba3",
+              "leftValue": "={{ $json.tag }}",
+              "rightValue": "世界时事",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        336
+      ],
+      "id": "6e1d7004-3333-4ef6-af02-ac2c9bddea76",
+      "name": "Filter - 世界时事"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f17a2342-e7ed-4cc0-92a2-b4bd63be0b86",
+              "leftValue": "={{ $json.importance_score }}",
+              "rightValue": 7,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "8a9b8754-8f2f-47b1-bf18-ed6f39b7f89e",
+              "leftValue": "={{ $json.tag }}",
+              "rightValue": "经济",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        400,
+        608
+      ],
+      "id": "63396911-c471-4600-9772-dea4f66f0242",
+      "name": "Filter - 经济新闻"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f17a2342-e7ed-4cc0-92a2-b4bd63be0b86",
+              "leftValue": "={{ $json.importance_score }}",
+              "rightValue": 6,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "a2ef84a4-068d-45d6-a532-1f198a7190b5",
+              "leftValue": "={{ $json.tag }}",
+              "rightValue": "科技",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        400,
+        848
+      ],
+      "id": "d0ea9a9f-2607-4056-931e-a84bb739fae2",
+      "name": "Filter - 科技新闻"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f17a2342-e7ed-4cc0-92a2-b4bd63be0b86",
+              "leftValue": "={{ $json.importance_score }}",
+              "rightValue": 6,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "a2ef84a4-068d-45d6-a532-1f198a7190b5",
+              "leftValue": "={{ $json.tag }}",
+              "rightValue": "军事",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        400,
+        1136
+      ],
+      "id": "ba3615f0-ce46-491d-b75a-fcde8e236f4f",
+      "name": "Filter - 军事新闻"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "=items",
+        "include": "specifiedFields",
+        "fieldsToInclude": "title, source, content,url",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        624,
+        80
+      ],
+      "id": "008dd0eb-98eb-40e7-a327-d6056784b19a",
+      "name": "Aggregate1"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "=items",
+        "include": "specifiedFields",
+        "fieldsToInclude": "title, source, content,url,tag",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        624,
+        336
+      ],
+      "id": "78578c7e-2d27-475b-ad2c-bf1be3d84508",
+      "name": "Aggregate2"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "=items",
+        "include": "specifiedFields",
+        "fieldsToInclude": "title, source, content,url,tag",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        624,
+        608
+      ],
+      "id": "401ea191-35ff-43e1-a1af-4d198997ec73",
+      "name": "Aggregate3"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "=items",
+        "include": "specifiedFields",
+        "fieldsToInclude": "title, source, content,url,tag",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        624,
+        848
+      ],
+      "id": "38a75fa3-7be6-4722-b792-75dde3a02f9a",
+      "name": "Aggregate4"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "=items",
+        "include": "specifiedFields",
+        "fieldsToInclude": "title, source, content,url,tag",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        624,
+        1136
+      ],
+      "id": "7cf0a032-3c00-45be-b070-4ae34907b022",
+      "name": "Aggregate5"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer d352b8ea676647ed8268e4dd7f8e8736.eFYV3HQh703BEq3h"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  \"model\": \"glm-4.5-air\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"你是一位顶级情报主编。请将提供的板块新闻列表，转化为一份视觉精美、逻辑深度的 HTML 格式智能简报。\\n\\n### HTML 排版规范：\\n1. **容器**：使用 <div style=\\\"font-family: sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: auto; padding: 20px; border: 1px solid #eee;\\\"> 包裹全局。\\n2. **标题**：板块标题使用 <h2 style=\\\"border-bottom: 2px solid #0052cc; color: #0052cc; padding-bottom: 10px;\\\">。\\n3. **卡片**：每个重点事件使用 <div style=\\\"background: #f9f9f9; padding: 15px; border-left: 5px solid #0052cc; margin-bottom: 20px;\\\">。\\n4. **高亮**：关键术语或数据使用 <span style=\\\"color: #d93025; font-weight: bold;\\\">。\\n\\n### 简报任务：\\n\\n【一】核心态势综述\\n- 用一段话总结该板块今日的“关键词”与“宏观动向”。\\n\\n【二】深度事件拆解\\n- 挑出 2 个核心事件。\\n- 使用 <ul> 列表展示：\\n  - <b>▸ 发生了什么：</b> 事实梗概。\\n  - <b>▸ 战略意图：</b> 对标的国家政策或行业痛点。\\n  - <b>▸ 实质影响：</b> 对本地/行业带来的具体改变。\\n\\n【三】多源对比与信源分析\\n- 若有多个信源：使用 <table style=\\\"width: 100%; border-collapse: collapse; margin-top: 10px;\\\"> 展示不同媒体的立场差异。\\n- 若为单一信源：分析其叙事侧重点及释放的“官方信号”。\\n\\n【四】趋势研判\\n- 使用 <div style=\\\"background: #eef6ff; padding: 10px; border-radius: 5px;\\\"> 包含“机遇”与“风险”预警。\\n\\n注意：请直接输出 <html> 标签内的内容，不要包含 ```html 这种 Markdown 标记，确保结果可以直接渲染。\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"待处理数据：\\n\" + JSON.stringify($json.items)\n    }\n  ],\n  \"temperature\": 0.3\n}) \n}}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 3000
+            }
+          },
+          "timeout": 1200000
+        }
+      },
+      "id": "752f6b18-a713-4786-b0f5-49a8fd545923",
+      "name": "HTTP Request - LLM澳门板块日报",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer d352b8ea676647ed8268e4dd7f8e8736.eFYV3HQh703BEq3h"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  \"model\": \"glm-4.5-air\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n    \"content\": \"你是一位顶级情报主编。请将提供的板{$json.tag}块新闻列表，转化为一份视觉精美、逻辑深度的 HTML 格式智能简报。\\n\\n### HTML 排版规范：\\n1. **容器**：使用 <div style=\\\"font-family: sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: auto; padding: 20px; border: 1px solid #eee;\\\"> 包裹全局。\\n2. **标题**：板块标题使用 <h2 style=\\\"border-bottom: 2px solid #0052cc; color: #0052cc; padding-bottom: 10px;\\\">。\\n3. **卡片**：每个重点事件使用 <div style=\\\"background: #f9f9f9; padding: 15px; border-left: 5px solid #0052cc; margin-bottom: 20px;\\\">。\\n4. **高亮**：关键术语或数据使用 <span style=\\\"color: #d93025; font-weight: bold;\\\">。\\n\\n### 简报任务：\\n\\n【一】核心态势综述\\n- 用一段话总结该板块今日的“关键词”与“宏观动向”。\\n\\n【二】深度事件拆解\\n- 挑出 2 个核心事件。\\n- 使用 <ul> 列表展示：\\n  - <b>▸ 发生了什么：</b> 事实梗概。\\n  - <b>▸ 战略意图：</b> 对标的国家政策或行业痛点。\\n  - <b>▸ 实质影响：</b> 对本地/行业带来的具体改变。\\n\\n【三】多源对比与信源分析\\n- 若有多个信源：使用 <table style=\\\"width: 100%; border-collapse: collapse; margin-top: 10px;\\\"> 展示不同媒体的立场差异。\\n- 若为单一信源：分析其叙事侧重点及释放的“官方信号”。\\n\\n【四】趋势研判\\n- 使用 <div style=\\\"background: #eef6ff; padding: 10px; border-radius: 5px;\\\"> 包含“机遇”与“风险”预警。\\n\\n注意：请直接输出 <html> 标签内的内容，不要包含 ```html 这种 Markdown 标记，确保结果可以直接渲染。\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"待处理数据：\\n\" + JSON.stringify($json.items)\n    }\n  ],\n  \"temperature\": 0.3\n}) \n}}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 3000
+            }
+          },
+          "timeout": 1200000
+        }
+      },
+      "id": "539fd67b-2ae6-4902-969e-910064251888",
+      "name": "HTTP Request - LLM时事板块日报",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer d352b8ea676647ed8268e4dd7f8e8736.eFYV3HQh703BEq3h"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  \"model\": \"glm-4.5-air\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n    \"content\": \"你是一位顶级情报主编。请将提供的板{$json.tag}块新闻列表，转化为一份视觉精美、逻辑深度的 HTML 格式智能简报。\\n\\n### HTML 排版规范：\\n1. **容器**：使用 <div style=\\\"font-family: sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: auto; padding: 20px; border: 1px solid #eee;\\\"> 包裹全局。\\n2. **标题**：板块标题使用 <h2 style=\\\"border-bottom: 2px solid #0052cc; color: #0052cc; padding-bottom: 10px;\\\">。\\n3. **卡片**：每个重点事件使用 <div style=\\\"background: #f9f9f9; padding: 15px; border-left: 5px solid #0052cc; margin-bottom: 20px;\\\">。\\n4. **高亮**：关键术语或数据使用 <span style=\\\"color: #d93025; font-weight: bold;\\\">。\\n\\n### 简报任务：\\n\\n【一】核心态势综述\\n- 用一段话总结该板块今日的“关键词”与“宏观动向”。\\n\\n【二】深度事件拆解\\n- 挑出 2 个核心事件。\\n- 使用 <ul> 列表展示：\\n  - <b>▸ 发生了什么：</b> 事实梗概。\\n  - <b>▸ 战略意图：</b> 对标的国家政策或行业痛点。\\n  - <b>▸ 实质影响：</b> 对本地/行业带来的具体改变。\\n\\n【三】多源对比与信源分析\\n- 若有多个信源：使用 <table style=\\\"width: 100%; border-collapse: collapse; margin-top: 10px;\\\"> 展示不同媒体的立场差异。\\n- 若为单一信源：分析其叙事侧重点及释放的“官方信号”。\\n\\n【四】趋势研判\\n- 使用 <div style=\\\"background: #eef6ff; padding: 10px; border-radius: 5px;\\\"> 包含“机遇”与“风险”预警。\\n\\n注意：请直接输出 <html> 标签内的内容，不要包含 ```html 这种 Markdown 标记，确保结果可以直接渲染。\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"待处理数据：\\n\" + JSON.stringify($json.items)\n    }\n  ],\n  \"temperature\": 0.3\n}) \n}}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 3000
+            }
+          },
+          "timeout": 1200000
+        }
+      },
+      "id": "45d72a93-a9c3-4fd2-be4c-868125586e44",
+      "name": "HTTP Request - LLM经济板块日报",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer d352b8ea676647ed8268e4dd7f8e8736.eFYV3HQh703BEq3h"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  \"model\": \"glm-4.5-air\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n    \"content\": \"你是一位顶级情报主编。请将提供的板{$json.tag}块新闻列表，转化为一份视觉精美、逻辑深度的 HTML 格式智能简报。\\n\\n### HTML 排版规范：\\n1. **容器**：使用 <div style=\\\"font-family: sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: auto; padding: 20px; border: 1px solid #eee;\\\"> 包裹全局。\\n2. **标题**：板块标题使用 <h2 style=\\\"border-bottom: 2px solid #0052cc; color: #0052cc; padding-bottom: 10px;\\\">。\\n3. **卡片**：每个重点事件使用 <div style=\\\"background: #f9f9f9; padding: 15px; border-left: 5px solid #0052cc; margin-bottom: 20px;\\\">。\\n4. **高亮**：关键术语或数据使用 <span style=\\\"color: #d93025; font-weight: bold;\\\">。\\n\\n### 简报任务：\\n\\n【一】核心态势综述\\n- 用一段话总结该板块今日的“关键词”与“宏观动向”。\\n\\n【二】深度事件拆解\\n- 挑出 2 个核心事件。\\n- 使用 <ul> 列表展示：\\n  - <b>▸ 发生了什么：</b> 事实梗概。\\n  - <b>▸ 战略意图：</b> 对标的国家政策或行业痛点。\\n  - <b>▸ 实质影响：</b> 对本地/行业带来的具体改变。\\n\\n【三】多源对比与信源分析\\n- 若有多个信源：使用 <table style=\\\"width: 100%; border-collapse: collapse; margin-top: 10px;\\\"> 展示不同媒体的立场差异。\\n- 若为单一信源：分析其叙事侧重点及释放的“官方信号”。\\n\\n【四】趋势研判\\n- 使用 <div style=\\\"background: #eef6ff; padding: 10px; border-radius: 5px;\\\"> 包含“机遇”与“风险”预警。\\n\\n注意：请直接输出 <html> 标签内的内容，不要包含 ```html 这种 Markdown 标记，确保结果可以直接渲染。\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"待处理数据：\\n\" + JSON.stringify($json.items)\n    }\n  ],\n  \"temperature\": 0.3\n}) \n}}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 3000
+            }
+          },
+          "timeout": 1200000
+        }
+      },
+      "id": "3d7062db-dda3-4160-9324-804609e1c97a",
+      "name": "HTTP Request - LLM科技板块日报",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer d352b8ea676647ed8268e4dd7f8e8736.eFYV3HQh703BEq3h"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  \"model\": \"glm-4.5-air\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n    \"content\": \"你是一位顶级情报主编。请将提供的板{$json.tag}块新闻列表，转化为一份视觉精美、逻辑深度的 HTML 格式智能简报。\\n\\n### HTML 排版规范：\\n1. **容器**：使用 <div style=\\\"font-family: sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: auto; padding: 20px; border: 1px solid #eee;\\\"> 包裹全局。\\n2. **标题**：板块标题使用 <h2 style=\\\"border-bottom: 2px solid #0052cc; color: #0052cc; padding-bottom: 10px;\\\">。\\n3. **卡片**：每个重点事件使用 <div style=\\\"background: #f9f9f9; padding: 15px; border-left: 5px solid #0052cc; margin-bottom: 20px;\\\">。\\n4. **高亮**：关键术语或数据使用 <span style=\\\"color: #d93025; font-weight: bold;\\\">。\\n\\n### 简报任务：\\n\\n【一】核心态势综述\\n- 用一段话总结该板块今日的“关键词”与“宏观动向”。\\n\\n【二】深度事件拆解\\n- 挑出 2 个核心事件。\\n- 使用 <ul> 列表展示：\\n  - <b>▸ 发生了什么：</b> 事实梗概。\\n  - <b>▸ 战略意图：</b> 对标的国家政策或行业痛点。\\n  - <b>▸ 实质影响：</b> 对本地/行业带来的具体改变。\\n\\n【三】多源对比与信源分析\\n- 若有多个信源：使用 <table style=\\\"width: 100%; border-collapse: collapse; margin-top: 10px;\\\"> 展示不同媒体的立场差异。\\n- 若为单一信源：分析其叙事侧重点及释放的“官方信号”。\\n\\n【四】趋势研判\\n- 使用 <div style=\\\"background: #eef6ff; padding: 10px; border-radius: 5px;\\\"> 包含“机遇”与“风险”预警。\\n\\n注意：请直接输出 <html> 标签内的内容，不要包含 ```html 这种 Markdown 标记，确保结果可以直接渲染。\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"待处理数据：\\n\" + JSON.stringify($json.items)\n    }\n  ],\n  \"temperature\": 0.3\n}) \n}}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 3000
+            }
+          },
+          "timeout": 1200000
+        }
+      },
+      "id": "f03780a8-1a88-4bcb-a43c-13b2ed55edac",
+      "name": "HTTP Request - LLM军事板块日报",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        1136
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/save_analysis",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  \"titles\": $node[\"Aggregate1\"].json.items.map(item => item.title)\n}) \n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        784,
+        224
+      ],
+      "id": "160fd7e6-6d81-4c9d-aa69-219f279a1ced",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/save_analysis",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  \"titles\": $node[\"Aggregate2\"].json.items.map(item => item.title)\n}) \n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        784,
+        464
+      ],
+      "id": "1b590b8e-b485-4d89-bcb3-bf00ea45b1f8",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/save_analysis",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  \"titles\": $node[\"Aggregate3\"].json.items.map(item => item.title)\n}) \n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        784,
+        736
+      ],
+      "id": "452697ac-6b28-43a9-a3c1-336231f77c96",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/save_analysis",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  \"titles\": $node[\"Aggregate4\"].json.items.map(item => item.title)\n}) \n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        784,
+        992
+      ],
+      "id": "e16f8f76-3e71-4bc0-97cd-e9650345cb4f",
+      "name": "HTTP Request3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/save_analysis",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  \"titles\": $node[\"Aggregate5\"].json.items.map(item => item.title)\n}) \n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        784,
+        1296
+      ],
+      "id": "8c17a438-7b58-4f49-9760-bb9e3110ecc4",
+      "name": "HTTP Request4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/save_report",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"tag\": \"澳门\", \"html_content\": $json.choices[0].message.content} }}",
+        "options": {}
+      },
+      "id": "58660adc-6ae2-4042-9d56-f1d33aef9bc5",
+      "name": "HTTP Request - 保存分析澳门",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        80
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/save_report",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"tag\": \"军事\", \"html_content\": $json.choices[0].message.content} }}",
+        "options": {}
+      },
+      "id": "6b6e4357-6a37-4876-afa9-7bc623f00326",
+      "name": "HTTP Request - 保存分析-军事",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        1136
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/save_report",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"tag\": \"科技\", \"html_content\": $json.choices[0].message.content} }}",
+        "options": {}
+      },
+      "id": "bd88390e-f077-4c8c-b82b-62c04a76593b",
+      "name": "HTTP Request - 保存分析-科技",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        864
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/save_report",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"tag\": \"经济\", \"html_content\": $json.choices[0].message.content} }}",
+        "options": {}
+      },
+      "id": "0c5d2277-8063-41cc-ab17-3e3904d0ac02",
+      "name": "HTTP Request - 保存分析-经济",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        608
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-runner:8000/save_report",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"tag\": \"世界时事\", \"html_content\": $json.choices[0].message.content} }}",
+        "options": {}
+      },
+      "id": "fa701873-c5f6-4bd7-b959-1ff4516de3c8",
+      "name": "HTTP Request - 保存分析-世界时事",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        336
+      ],
+      "alwaysOutputData": false
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger - 启动爬虫": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - 调用爬虫",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - 调用爬虫": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript - 数据清洗",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger - 早晚报分析": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - 查询待分析",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request - 查询待分析1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request - 查询待分析2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request - 查询待分析3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request - 查询待分析4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - 查询待分析": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript - 数据清洗": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript - 删除符号干扰",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript - 标签拆解": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - 保存数据库",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - 数据查重": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - 数据查重",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript - 删除符号干扰": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - LLM聚类筛选": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript - 标签拆解",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "HTTP Request - LLM聚类筛选",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - 保存数据库": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Filter - 澳门新闻",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - 查询待分析1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Filter - 世界时事",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - 查询待分析2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Filter - 经济新闻",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - 查询待分析3": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Filter - 科技新闻",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - 查询待分析4": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript5": {
+      "main": [
+        [
+          {
+            "node": "Filter - 军事新闻",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter - 澳门新闻": {
+      "main": [
+        [
+          {
+            "node": "Aggregate1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter - 世界时事": {
+      "main": [
+        [
+          {
+            "node": "Aggregate2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter - 经济新闻": {
+      "main": [
+        [
+          {
+            "node": "Aggregate3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter - 科技新闻": {
+      "main": [
+        [
+          {
+            "node": "Aggregate4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter - 军事新闻": {
+      "main": [
+        [
+          {
+            "node": "Aggregate5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request - LLM澳门板块日报",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - LLM澳门板块日报": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - 保存分析澳门",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LLM时事板块日报",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LLM经济板块日报",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate4": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LLM科技板块日报",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate5": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LLM军事板块日报",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - LLM时事板块日报": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - 保存分析-世界时事",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - LLM军事板块日报": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - 保存分析-军事",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - LLM科技板块日报": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - 保存分析-科技",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - LLM经济板块日报": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - 保存分析-经济",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send an Email": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request - 保存分析-世界时事": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c0ca059e-2eb1-4f71-9166-0997a51311fb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "15fbb91d286a78588135a5f88899e96b2087e77d09f20fd5aeceb773248f5406"
+  },
+  "id": "UNCn4l0y6jFEkWGM",
+  "tags": []
+}
