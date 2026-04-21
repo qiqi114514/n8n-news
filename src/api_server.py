@@ -17,7 +17,8 @@ SCRIPT_MAP = {
     "preprocess": "preprocess.py",
     "query_pending": "query_pending.py",
     "save_analysis": "save_analysis.py",
-    "save_report" : "save_report.py"
+    "save_report" : "save_report.py",
+    "query_subscriptions" : "query_subscriptions.py"
 }
 
 class APIHandler(BaseHTTPRequestHandler):
