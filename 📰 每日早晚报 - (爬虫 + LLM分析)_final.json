@@ -17,8 +17,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
       "position": [
-        -128,
-        -160
+        -2272,
+        -104
       ]
     },
     {
@@ -48,8 +48,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        64,
-        -160
+        -2048,
+        -104
       ],
       "retryOnFail": true
     },
@@ -100,8 +100,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1872,
-        -160
+        -32,
+        -104
       ],
       "executeOnce": false
     },
@@ -121,8 +121,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
       "position": [
-        -272,
-        448
+        -2272,
+        984
       ]
     },
     {
@@ -139,8 +139,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        0,
-        80
+        -2048,
+        216
       ]
     },
     {
@@ -150,8 +150,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        256,
-        -160
+        -1824,
+        -104
       ],
       "id": "43e2ceca-b770-4886-8462-dc737187ea26",
       "name": "Code in JavaScript - 数据清洗"
@@ -163,8 +163,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1680,
-        -160
+        -256,
+        -176
       ],
       "id": "7b5e1ee2-a113-41b5-93b4-9373828e5b36",
       "name": "Code in JavaScript - 标签拆解"
@@ -196,8 +196,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        992,
-        -160
+        -928,
+        -104
       ],
       "id": "16c180b6-c46d-4074-8d04-ddba79c851f0",
       "name": "If"
@@ -216,8 +216,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        832,
-        -160
+        -1152,
+        -104
       ],
       "id": "d644043e-522d-46e7-abe3-3bfa59e23c66",
       "name": "HTTP Request - 数据查重",
@@ -231,8 +231,8 @@
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
       "position": [
-        640,
-        -160
+        -1376,
+        -104
       ],
       "id": "dcde75ff-b5ca-4a80-ba15-51ee4f017aa6",
       "name": "Aggregate"
@@ -244,8 +244,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        464,
-        -160
+        -1600,
+        -104
       ],
       "id": "c420de42-346d-4583-abfc-fed896f64668",
       "name": "Code in JavaScript - 删除符号干扰"
@@ -273,8 +273,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1456,
-        -160
+        -480,
+        -176
       ],
       "id": "e25fc09d-a8b2-4fe2-84f9-bf934947e33f",
       "name": "HTTP Request - LLM聚类筛选",
@@ -289,8 +289,8 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        1232,
-        -176
+        -704,
+        -104
       ],
       "id": "77dcc222-1a87-48ac-9df0-2df9b65ad9da",
       "name": "Loop Over Items"
@@ -302,8 +302,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        208,
-        80
+        -1824,
+        216
       ],
       "id": "efe02c48-1a75-4049-9de7-91ec7c62d6ff",
       "name": "Code in JavaScript1"
@@ -322,8 +322,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -16,
-        336
+        -2048,
+        600
       ]
     },
     {
@@ -333,8 +333,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        208,
-        336
+        -1824,
+        600
       ],
       "id": "2b8eb4c7-8ec4-4757-9d9a-f034dddbbd41",
       "name": "Code in JavaScript2"
@@ -353,8 +353,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -16,
-        608
+        -2048,
+        984
       ]
     },
     {
@@ -364,8 +364,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        192,
-        608
+        -1824,
+        984
       ],
       "id": "30531cbb-93d7-4075-85d7-5242022b06ae",
       "name": "Code in JavaScript3"
@@ -384,8 +384,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -16,
-        848
+        -2048,
+        1368
       ]
     },
     {
@@ -395,8 +395,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        192,
-        848
+        -1824,
+        1368
       ],
       "id": "687e959d-5569-4c5d-9d88-95311253930b",
       "name": "Code in JavaScript4"
@@ -415,8 +415,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -16,
-        1136
+        -2048,
+        1752
       ]
     },
     {
@@ -426,8 +426,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        192,
-        1136
+        -1824,
+        1752
       ],
       "id": "1f081edf-df5f-4400-bbdd-2e064ba78a9d",
       "name": "Code in JavaScript5"
@@ -459,8 +459,8 @@
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.3,
       "position": [
-        400,
-        80
+        -1600,
+        216
       ],
       "id": "ff2c3c64-1ad4-49a0-8628-ec312d0f00c7",
       "name": "Filter - 澳门新闻"
@@ -501,8 +501,8 @@
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.3,
       "position": [
-        416,
-        336
+        -1600,
+        600
       ],
       "id": "6e1d7004-3333-4ef6-af02-ac2c9bddea76",
       "name": "Filter - 世界时事"
@@ -543,8 +543,8 @@
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.3,
       "position": [
-        400,
-        608
+        -1600,
+        984
       ],
       "id": "63396911-c471-4600-9772-dea4f66f0242",
       "name": "Filter - 经济新闻"
@@ -586,8 +586,8 @@
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.3,
       "position": [
-        400,
-        848
+        -1600,
+        1368
       ],
       "id": "d0ea9a9f-2607-4056-931e-a84bb739fae2",
       "name": "Filter - 科技新闻"
@@ -629,8 +629,8 @@
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.3,
       "position": [
-        400,
-        1136
+        -1600,
+        1752
       ],
       "id": "ba3615f0-ce46-491d-b75a-fcde8e236f4f",
       "name": "Filter - 军事新闻"
@@ -646,8 +646,8 @@
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
       "position": [
-        624,
-        80
+        -1376,
+        216
       ],
       "id": "008dd0eb-98eb-40e7-a327-d6056784b19a",
       "name": "Aggregate1"
@@ -663,8 +663,8 @@
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
       "position": [
-        624,
-        336
+        -1376,
+        600
       ],
       "id": "78578c7e-2d27-475b-ad2c-bf1be3d84508",
       "name": "Aggregate2"
@@ -680,8 +680,8 @@
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
       "position": [
-        624,
-        608
+        -1376,
+        984
       ],
       "id": "401ea191-35ff-43e1-a1af-4d198997ec73",
       "name": "Aggregate3"
@@ -697,8 +697,8 @@
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
       "position": [
-        624,
-        848
+        -1376,
+        1368
       ],
       "id": "38a75fa3-7be6-4722-b792-75dde3a02f9a",
       "name": "Aggregate4"
@@ -714,8 +714,8 @@
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
       "position": [
-        624,
-        1136
+        -1376,
+        1752
       ],
       "id": "7cf0a032-3c00-45be-b070-4ae34907b022",
       "name": "Aggregate5"
@@ -751,8 +751,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        784,
-        80
+        -1152,
+        120
       ]
     },
     {
@@ -786,8 +786,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        784,
-        336
+        -1152,
+        504
       ]
     },
     {
@@ -821,8 +821,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        784,
-        608
+        -1152,
+        888
       ]
     },
     {
@@ -856,8 +856,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        784,
-        864
+        -1152,
+        1272
       ]
     },
     {
@@ -891,8 +891,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        784,
-        1136
+        -1152,
+        1656
       ]
     },
     {
@@ -907,8 +907,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        784,
-        224
+        -1152,
+        312
       ],
       "id": "160fd7e6-6d81-4c9d-aa69-219f279a1ced",
       "name": "HTTP Request"
@@ -925,8 +925,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        784,
-        464
+        -1152,
+        696
       ],
       "id": "1b590b8e-b485-4d89-bcb3-bf00ea45b1f8",
       "name": "HTTP Request1"
@@ -943,8 +943,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        784,
-        736
+        -1152,
+        1080
       ],
       "id": "452697ac-6b28-43a9-a3c1-336231f77c96",
       "name": "HTTP Request2"
@@ -961,8 +961,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        784,
-        992
+        -1152,
+        1464
       ],
       "id": "e16f8f76-3e71-4bc0-97cd-e9650345cb4f",
       "name": "HTTP Request3"
@@ -979,8 +979,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        992,
-        1296
+        -1152,
+        1848
       ],
       "id": "8c17a438-7b58-4f49-9760-bb9e3110ecc4",
       "name": "HTTP Request4"
@@ -999,8 +999,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1120,
-        80
+        -928,
+        120
       ],
       "alwaysOutputData": false
     },
@@ -1018,8 +1018,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1120,
-        1136
+        -928,
+        1656
       ],
       "alwaysOutputData": false
     },
@@ -1037,8 +1037,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1120,
-        864
+        -928,
+        1272
       ],
       "alwaysOutputData": false
     },
@@ -1056,8 +1056,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1120,
-        608
+        -928,
+        888
       ],
       "alwaysOutputData": false
     },
@@ -1075,8 +1075,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1120,
-        336
+        -928,
+        504
       ],
       "alwaysOutputData": false
     },
@@ -1087,8 +1087,8 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        256,
-        1488
+        -1824,
+        2072
       ],
       "id": "4d70fa4c-b44c-4375-a585-450ce958e516",
       "name": "Loop Over Items1"
@@ -1105,8 +1105,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -64,
-        1488
+        -2048,
+        2072
       ],
       "id": "350efcbb-b99b-4b32-9e6a-0647b1fdc0b6",
       "name": "HTTP Request - 检索订阅表"
@@ -1122,8 +1122,8 @@
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
       "position": [
-        608,
-        1488
+        -1600,
+        2072
       ],
       "id": "e786a518-5f7f-41a1-bd30-c197feb46e47",
       "name": "Send an Email5",
@@ -1149,8 +1149,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
       "position": [
-        -320,
-        1488
+        -2272,
+        2072
       ],
       "id": "3a41128b-3e3c-449f-a0c5-76f820fe2702",
       "name": "Schedule Trigger - 个性化推送"
@@ -1687,7 +1687,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "45b79662-974f-4a7e-885d-310b7a5b9280",
+  "versionId": "907db3cf-4f0e-4c2f-b376-09fcd76f5fa3",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "15fbb91d286a78588135a5f88899e96b2087e77d09f20fd5aeceb773248f5406"

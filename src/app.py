@@ -8,7 +8,7 @@ from pathlib import Path
 
 # 1. 页面基本配置
 st.set_page_config(
-    page_title="AI 智能情报分析门户",
+    page_title="AI 智能新闻分析平台",
     page_icon="📡",
     layout="wide"
 )
@@ -295,7 +295,7 @@ init_users_table()
 init_subscriptions_table()
 
 # --- 主界面 ---
-st.title("📡 AI 智能情报分析门户")
+st.title("📡 AI 智能新闻分析平台")
 
 # 显示登录状态和登出按钮
 if st.session_state.logged_in:
@@ -530,7 +530,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: #888;'>
-        <p>📡 AI 智能情报分析门户 | 数据实时更新中</p>
+        <p>📡 AI 智能新闻分析平台 | 数据实时更新中</p>
     </div>
     """,
     unsafe_allow_html=True
