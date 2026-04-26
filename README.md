@@ -89,8 +89,7 @@ n8n-news/
 
 ## 🚦 服务端口
 
-- n8n工作流引擎: `http://localhost:5679`
-- Streamlit界面: `http://localhost:8000`
+- Streamlit界面: `https://reattach-epilogue-trustable.ngrok-free.dev/`
 
 ## 🤝 贡献
 
