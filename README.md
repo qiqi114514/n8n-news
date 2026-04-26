@@ -62,15 +62,14 @@ n8n-news/
 ## 🌐 支持的新闻源
 
 - AP News
+- AFP (法新社)
 - BBC
-- CCTV
 - Xinhua (新华社)
-- ChinaNews (中新网)
 - People (人民网)
 - Reuters
 - NHK (日本)
-- France24 (法语)
 - Guardian (卫报)
+- 澳门新闻局
 
 ## 📊 数据处理流程
 
